@@ -1,0 +1,372 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+import importlib
+import json
+import time
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import httpx
+
+from ...config import (
+    OPENROUTER_API_KEY,
+    OPENROUTER_APP_NAME,
+    OPENROUTER_MODEL_CACHE_TTL_SECONDS,
+    OPENROUTER_SITE_URL,
+)
+from ...util import ModelInfo, parse_model_info
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class OpenRouterApiError(RuntimeError):
+    """Raised when an OpenRouter request fails."""
+
+
+class OpenRouterClient:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        site_url: str | None = None,
+        app_name: str | None = None,
+        model_cache_ttl_seconds: int = OPENROUTER_MODEL_CACHE_TTL_SECONDS,
+    ):
+        self.api_key = api_key
+        self.site_url = site_url
+        self.app_name = app_name
+        self.model_cache_ttl_seconds = model_cache_ttl_seconds
+        self._models_cache: list[ModelInfo] = []
+        self._models_cache_expires_at = 0.0
+        self._models_lock = asyncio.Lock()
+
+    async def create_chat_completion(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        modalities: list[str] | None = None,
+        image_config: dict[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
+        user: str | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        openrouter_sdk = self._import_openrouter_sdk()
+        client_kwargs: dict[str, Any] = {"api_key": self.api_key}
+        if self.site_url:
+            client_kwargs["http_referer"] = self.site_url
+        if self.app_name:
+            client_kwargs["x_open_router_title"] = self.app_name
+
+        request_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+        if modalities:
+            request_kwargs["modalities"] = list(modalities)
+        if image_config:
+            request_kwargs["image_config"] = dict(image_config)
+        if temperature is not None:
+            request_kwargs["temperature"] = temperature
+        if top_p is not None:
+            request_kwargs["top_p"] = top_p
+        if max_tokens is not None:
+            request_kwargs["max_tokens"] = max_tokens
+        if reasoning_effort:
+            request_kwargs["reasoning"] = {"effort": reasoning_effort}
+        if user:
+            request_kwargs["user"] = user
+        if session_id:
+            request_kwargs["session_id"] = session_id[:128]
+
+        try:
+            async with openrouter_sdk.OpenRouter(**client_kwargs) as client:
+                response = await client.chat.send_async(**request_kwargs)
+        except ModuleNotFoundError as error:
+            raise OpenRouterApiError(
+                "The `openrouter` Python package is not installed. Run `python -m pip install .`."
+            ) from error
+        except Exception as error:
+            raise OpenRouterApiError(str(error)) from error
+        return _to_plain_dict(response)
+
+    async def create_speech(
+        self,
+        *,
+        model: str,
+        input_text: str,
+        voice: str | None,
+        response_format: str,
+        modalities: list[str] | None = None,
+        instructions: str | None = None,
+        user: str | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        prompt_text = _build_tts_prompt(input_text=input_text, instructions=instructions)
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt_text}],
+            "modalities": list(modalities or ["text", "audio"]),
+            "audio": {
+                "format": response_format,
+            },
+            "stream": True,
+        }
+        if voice:
+            payload["audio"]["voice"] = voice
+        if user:
+            payload["user"] = user
+        if session_id:
+            payload["session_id"] = session_id[:128]
+        return await self._stream_audio_completion(payload)
+
+    async def list_models(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 10,
+        refresh: bool = False,
+        input_modality: str | None = None,
+        output_modality: str | None = None,
+    ) -> list[ModelInfo]:
+        if limit <= 0:
+            return []
+        models = await self._get_cached_models(refresh=refresh)
+        if input_modality:
+            models = [
+                model for model in models if input_modality.casefold() in _casefolded(model.input_modalities)
+            ]
+        if output_modality:
+            models = [
+                model
+                for model in models
+                if output_modality.casefold() in _casefolded(model.output_modalities)
+            ]
+        if not query:
+            return sorted(models, key=lambda model: model.name.casefold())[:limit]
+
+        needle = query.strip().casefold()
+        ranked_matches: list[tuple[int, str, ModelInfo]] = []
+        for model in models:
+            haystacks = [
+                model.id.casefold(),
+                model.name.casefold(),
+                (model.canonical_slug or "").casefold(),
+                (model.description or "").casefold(),
+            ]
+            if needle == haystacks[0] or needle == haystacks[1] or needle == haystacks[2]:
+                rank = 0
+            elif haystacks[0].startswith(needle) or haystacks[1].startswith(needle):
+                rank = 1
+            elif any(needle in haystack for haystack in haystacks[:3]):
+                rank = 2
+            elif needle in haystacks[3]:
+                rank = 3
+            else:
+                continue
+            ranked_matches.append((rank, model.name.casefold(), model))
+
+        ranked_matches.sort(key=lambda item: (item[0], item[1]))
+        return [model for _, _, model in ranked_matches[:limit]]
+
+    async def get_model(self, model_query: str, *, refresh: bool = False) -> ModelInfo | None:
+        normalized_query = model_query.strip()
+        if not normalized_query:
+            return None
+        exact_matches = await self.list_models(query=normalized_query, limit=25, refresh=refresh)
+        normalized_casefold = normalized_query.casefold()
+        for model in exact_matches:
+            if normalized_casefold in {
+                model.id.casefold(),
+                model.name.casefold(),
+                (model.canonical_slug or "").casefold(),
+            }:
+                return model
+        return exact_matches[0] if exact_matches else None
+
+    async def _get_cached_models(self, *, refresh: bool) -> list[ModelInfo]:
+        now = time.monotonic()
+        if not refresh and self._models_cache and now < self._models_cache_expires_at:
+            return list(self._models_cache)
+
+        async with self._models_lock:
+            now = time.monotonic()
+            if not refresh and self._models_cache and now < self._models_cache_expires_at:
+                return list(self._models_cache)
+            self._models_cache = await self._fetch_models_from_api()
+            self._models_cache_expires_at = now + self.model_cache_ttl_seconds
+            return list(self._models_cache)
+
+    async def _stream_audio_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
+        import httpx
+
+        timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            async with client.stream(
+                "POST",
+                f"{OPENROUTER_BASE_URL}/chat/completions",
+                headers=self._request_headers(),
+                json=payload,
+            ) as response:
+                if response.status_code >= 400:
+                    body = await response.aread()
+                    raise OpenRouterApiError(_extract_error_message_from_bytes(response.status_code, body))
+                return await _collect_audio_stream(response.aiter_lines())
+
+    async def _fetch_models_from_api(self) -> list[ModelInfo]:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(
+                f"{OPENROUTER_BASE_URL}/models/user",
+                headers=self._request_headers(),
+            )
+            if response.status_code in {404, 405, 422}:
+                response = await client.get(
+                    f"{OPENROUTER_BASE_URL}/models",
+                    headers=self._request_headers(),
+                )
+
+        if response.status_code >= 400:
+            raise OpenRouterApiError(_extract_error_message(response))
+
+        payload = response.json()
+        return [parse_model_info(item) for item in payload.get("data") or []]
+
+    def _request_headers(self) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        if self.site_url:
+            headers["HTTP-Referer"] = self.site_url
+        if self.app_name:
+            headers["X-Title"] = self.app_name
+        return headers
+
+    @staticmethod
+    def _import_openrouter_sdk():
+        return importlib.import_module("openrouter")
+
+
+def _extract_error_message(response: Any) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        error_payload = payload.get("error") or {}
+        message = error_payload.get("message") or payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    return f"OpenRouter request failed with status {response.status_code}."
+
+
+def _extract_error_message_from_bytes(status_code: int, payload_bytes: bytes) -> str:
+    try:
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict):
+        error_payload = payload.get("error") or {}
+        message = error_payload.get("message") or payload.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    return f"OpenRouter request failed with status {status_code}."
+
+
+async def _collect_audio_stream(lines) -> dict[str, Any]:
+    audio_chunks: list[str] = []
+    transcript_parts: list[str] = []
+    text_parts: list[str] = []
+    usage: dict[str, Any] = {}
+    resolved_model: str | None = None
+
+    async for raw_line in lines:
+        line = raw_line.strip()
+        if not line or not line.startswith("data:"):
+            continue
+        payload = line[5:].strip()
+        if payload == "[DONE]":
+            break
+        try:
+            chunk = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(chunk, dict):
+            continue
+        if isinstance(chunk.get("model"), str):
+            resolved_model = chunk["model"]
+        if isinstance(chunk.get("usage"), dict):
+            usage = chunk["usage"]
+
+        choice = ((chunk.get("choices") or [None])[0])
+        if not isinstance(choice, dict):
+            continue
+        delta = choice.get("delta") or {}
+        if not isinstance(delta, dict):
+            continue
+
+        audio_payload = delta.get("audio") or {}
+        if isinstance(audio_payload, dict):
+            if isinstance(audio_payload.get("data"), str) and audio_payload["data"]:
+                audio_chunks.append(audio_payload["data"])
+            if isinstance(audio_payload.get("transcript"), str) and audio_payload["transcript"]:
+                transcript_parts.append(audio_payload["transcript"])
+
+        content = delta.get("content")
+        if isinstance(content, str) and content:
+            text_parts.append(content)
+        elif isinstance(content, list):
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str) and text:
+                    text_parts.append(text)
+
+    audio_bytes = base64.b64decode("".join(audio_chunks)) if audio_chunks else b""
+    return {
+        "audio_bytes": audio_bytes,
+        "transcript": "".join(transcript_parts).strip(),
+        "text": "".join(text_parts).strip(),
+        "usage": usage,
+        "model": resolved_model,
+    }
+
+
+def _build_tts_prompt(*, input_text: str, instructions: str | None) -> str:
+    normalized_instructions = (instructions or "").strip()
+    if not normalized_instructions:
+        return input_text
+    return f"{normalized_instructions}\n\nText to speak:\n{input_text}"
+
+
+def _casefolded(values: list[str]) -> set[str]:
+    return {value.casefold() for value in values}
+
+
+def _to_plain_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        return value.model_dump(by_alias=True, exclude_none=True)
+    if hasattr(value, "dict"):
+        return value.dict(exclude_none=True)
+    raise OpenRouterApiError("Unexpected response type returned by the OpenRouter SDK.")
+
+
+def build_openrouter_client() -> OpenRouterClient:
+    if not OPENROUTER_API_KEY:
+        raise OpenRouterApiError("OPENROUTER_API_KEY is not configured.")
+    return OpenRouterClient(
+        api_key=OPENROUTER_API_KEY,
+        site_url=OPENROUTER_SITE_URL,
+        app_name=OPENROUTER_APP_NAME,
+        model_cache_ttl_seconds=OPENROUTER_MODEL_CACHE_TTL_SECONDS,
+    )

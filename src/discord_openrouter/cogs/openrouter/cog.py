@@ -1,0 +1,475 @@
+from __future__ import annotations
+
+import logging
+
+from discord import ApplicationContext, Attachment
+from discord.commands import SlashCommandGroup, option
+from discord.ext import commands, tasks
+
+from ...config import (
+    GUILD_IDS,
+    OPENROUTER_DEFAULT_IMAGE_MODEL,
+    OPENROUTER_DEFAULT_STT_MODEL,
+    OPENROUTER_DEFAULT_TEXT_MODEL,
+    OPENROUTER_DEFAULT_TTS_MODEL,
+)
+from .chat import (
+    handle_check_permissions,
+    handle_on_message,
+    keep_typing as keep_typing_loop,
+    run_chat_command,
+)
+from .chat import handle_new_message_in_conversation as handle_conversation_message
+from .chat import regenerate_conversation_response as regenerate_response
+from .client import OpenRouterApiError, build_openrouter_client
+from .command_options import (
+    IMAGE_ASPECT_RATIO_CHOICES,
+    IMAGE_SIZE_CHOICES,
+    MODEL_INPUT_MODALITY_CHOICES,
+    MODEL_OUTPUT_MODALITY_CHOICES,
+    MODEL_SCOPE_CHOICES,
+    REASONING_EFFORT_CHOICES,
+    TTS_FORMAT_CHOICES,
+)
+from .embeds import (
+    build_current_model_embed,
+    build_model_list_embed,
+    build_model_status_embed,
+    error_embed,
+)
+from .image import run_image_command
+from .speech import run_stt_command, run_tts_command
+from .state import (
+    cleanup_conversation,
+    create_button_view,
+    find_active_conversation,
+    prune_runtime_state,
+    stop_conversation,
+    strip_previous_view,
+)
+
+
+class OpenRouterCog(commands.Cog):
+    openrouter = SlashCommandGroup("openrouter", "OpenRouter commands", guild_ids=GUILD_IDS)
+
+    def __init__(self, bot):
+        self.logger = logging.getLogger(__name__)
+        self.bot = bot
+        self.openrouter_client = build_openrouter_client()
+        self.conversation_histories = {}
+        self.views = {}
+        self.last_view_messages = {}
+        self.daily_costs = {}
+        self.channel_model_defaults: dict[tuple[int, int], str] = {}
+
+    def cog_unload(self):
+        if self._runtime_cleanup_task.is_running():
+            self._runtime_cleanup_task.cancel()
+
+    async def _strip_previous_view(self, conversation_id: int) -> None:
+        await strip_previous_view(self, conversation_id)
+
+    async def _cleanup_conversation(self, user, conversation_id: int | None = None) -> None:
+        await cleanup_conversation(self, user, conversation_id)
+
+    async def _stop_conversation(self, conversation_id: int, user) -> None:
+        await stop_conversation(self, conversation_id, user)
+
+    async def _prune_runtime_state(self) -> None:
+        await prune_runtime_state(self)
+
+    def _create_button_view(self, user, conversation_id: int):
+        return create_button_view(self, user, conversation_id)
+
+    async def handle_new_message_in_conversation(self, message, conversation):
+        await handle_conversation_message(self, message, conversation)
+
+    async def regenerate_conversation_response(self, interaction, conversation):
+        await regenerate_response(self, interaction, conversation)
+
+    async def keep_typing(self, channel):
+        await keep_typing_loop(channel)
+
+    @tasks.loop(minutes=15)
+    async def _runtime_cleanup_task(self) -> None:
+        await self._prune_runtime_state()
+
+    @_runtime_cleanup_task.before_loop
+    async def _before_runtime_cleanup_task(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        bot_user = self.bot.user
+        bot_user_id = bot_user.id if bot_user is not None else "unknown"
+        self.logger.info("Logged in as %s (ID: %s)", bot_user, bot_user_id)
+        self.logger.info("Attempting to sync commands for guilds: %s", GUILD_IDS)
+        if not self._runtime_cleanup_task.is_running():
+            self._runtime_cleanup_task.start()
+        try:
+            await self.bot.sync_commands()
+            self.logger.info("Commands synchronized successfully.")
+        except Exception as error:
+            self.logger.error("Error during command synchronization: %s", error, exc_info=True)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        await handle_on_message(self, message)
+
+    @commands.Cog.listener()
+    async def on_error(self, event, *args, **kwargs):
+        self.logger.error("Error in event %s: %s %s", event, args, kwargs, exc_info=True)
+
+    @openrouter.command(
+        name="check_permissions",
+        description="Check if bot has necessary permissions in this channel",
+    )
+    async def check_permissions(self, ctx: ApplicationContext):
+        await handle_check_permissions(self, ctx)
+
+    @openrouter.command(
+        name="chat",
+        description="Starts a conversation with a model.",
+    )
+    @option("prompt", description="Prompt", required=True, type=str)
+    @option(
+        "persona",
+        description="What role you want the model to emulate. (default: You are a helpful assistant.)",
+        required=False,
+        type=str,
+    )
+    @option(
+        "model",
+        description="OpenRouter model slug to use. (default: channel setting or OPENROUTER_DEFAULT_TEXT_MODEL)",
+        required=False,
+        type=str,
+    )
+    @option(
+        "attachment",
+        description="Attach an image, PDF, audio, video, or file. (default: not set)",
+        required=False,
+        type=Attachment,
+    )
+    @option(
+        "temperature",
+        description="Sampling temperature.",
+        required=False,
+        type=float,
+    )
+    @option(
+        "top_p",
+        description="Nucleus sampling value.",
+        required=False,
+        type=float,
+    )
+    @option(
+        "max_tokens",
+        description="Maximum completion tokens.",
+        required=False,
+        type=int,
+    )
+    @option(
+        "reasoning_effort",
+        description="Reasoning effort for supported models.",
+        required=False,
+        type=str,
+        choices=REASONING_EFFORT_CHOICES,
+    )
+    async def chat(
+        self,
+        ctx: ApplicationContext,
+        prompt: str,
+        persona: str | None = None,
+        model: str | None = None,
+        attachment: Attachment | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
+    ):
+        await run_chat_command(
+            self,
+            ctx=ctx,
+            prompt=prompt,
+            model=model,
+            persona=persona,
+            attachment=attachment,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+
+    @openrouter.command(
+        name="models",
+        description="Search the models available through OpenRouter.",
+    )
+    @option("query", description="Optional search text.", required=False, type=str)
+    @option(
+        "input_modality",
+        description="Filter models by a supported input modality.",
+        required=False,
+        type=str,
+        choices=MODEL_INPUT_MODALITY_CHOICES,
+    )
+    @option(
+        "output_modality",
+        description="Filter models by a supported output modality.",
+        required=False,
+        type=str,
+        choices=MODEL_OUTPUT_MODALITY_CHOICES,
+    )
+    @option("limit", description="Maximum number of models to return.", required=False, type=int)
+    @option("refresh", description="Refresh the cached model catalog.", required=False, type=bool)
+    async def models(
+        self,
+        ctx: ApplicationContext,
+        query: str | None = None,
+        input_modality: str | None = None,
+        output_modality: str | None = None,
+        limit: int | None = None,
+        refresh: bool | None = None,
+    ):
+        await ctx.defer()
+        try:
+            models = await self.openrouter_client.list_models(
+                query=query,
+                input_modality=input_modality,
+                output_modality=output_modality,
+                limit=limit or 10,
+                refresh=bool(refresh),
+            )
+        except OpenRouterApiError as error:
+            await ctx.followup.send(embed=error_embed(str(error)))
+            return
+
+        await ctx.followup.send(
+            embed=build_model_list_embed(
+                models,
+                query=query,
+                input_modality=input_modality,
+                output_modality=output_modality,
+            )
+        )
+
+    @openrouter.command(
+        name="current_model",
+        description="Show the active and default model state for this channel.",
+    )
+    async def current_model(self, ctx: ApplicationContext):
+        user_id = ctx.user.id
+        channel_id = ctx.channel.id if ctx.channel is not None else 0
+        active_conversation = find_active_conversation(self, channel_id=channel_id, user_id=user_id)
+        channel_default = self.channel_model_defaults.get((channel_id, user_id))
+        embed = build_current_model_embed(
+            active_model=active_conversation.settings.model if active_conversation else None,
+            channel_default=channel_default,
+            global_default=OPENROUTER_DEFAULT_TEXT_MODEL,
+        )
+        await ctx.respond(embed=embed)
+
+    @openrouter.command(
+        name="switch_model",
+        description="Switch the active conversation model, save a channel default, or both.",
+    )
+    @option("model", description="Model slug or search text.", required=True, type=str)
+    @option(
+        "scope",
+        description="Apply the model to the current conversation, the channel default, or both.",
+        required=False,
+        type=str,
+        choices=MODEL_SCOPE_CHOICES,
+    )
+    async def switch_model(
+        self,
+        ctx: ApplicationContext,
+        model: str,
+        scope: str | None = None,
+    ):
+        await ctx.defer()
+        resolved_scope = scope or "conversation"
+        channel_id = ctx.channel.id if ctx.channel is not None else 0
+        user_id = ctx.user.id
+        active_conversation = find_active_conversation(self, channel_id=channel_id, user_id=user_id)
+
+        try:
+            model_info = await self.openrouter_client.get_model(model)
+        except OpenRouterApiError as error:
+            await ctx.followup.send(embed=error_embed(str(error)))
+            return
+
+        resolved_model = model_info.id if model_info is not None else model.strip()
+        lines = [f"**Resolved model:** `{resolved_model}`"]
+
+        if resolved_scope in {"conversation", "both"}:
+            if active_conversation is None:
+                if resolved_scope == "conversation":
+                    self.channel_model_defaults[(channel_id, user_id)] = resolved_model
+                    lines.append("**Conversation:** no active conversation to update")
+                    lines.append("**Channel default:** updated (fallback)")
+                    resolved_scope = "channel"
+                else:
+                    lines.append("**Conversation:** no active conversation to update")
+            else:
+                active_conversation.settings.model = resolved_model
+                active_conversation.touch()
+                lines.append("**Conversation:** updated")
+
+        if resolved_scope in {"channel", "both"} and (
+            "**Channel default:** updated (fallback)" not in lines
+        ):
+            self.channel_model_defaults[(channel_id, user_id)] = resolved_model
+            lines.append("**Channel default:** updated")
+
+        if model_info is None:
+            lines.append("Model was not found in the cached catalog, so it was saved exactly as typed.")
+
+        await ctx.followup.send(
+            embed=build_model_status_embed(
+                title="Model Updated",
+                model=resolved_model,
+                description="\n".join(lines[1:]) if len(lines) > 1 else None,
+                model_info=model_info,
+            )
+        )
+
+    @openrouter.command(
+        name="image",
+        description="Generates or edits an image from a prompt.",
+    )
+    @option("prompt", description="Prompt", required=True, type=str)
+    @option(
+        "model",
+        description=f"OpenRouter image model slug to use. (default: {OPENROUTER_DEFAULT_IMAGE_MODEL})",
+        required=False,
+        type=str,
+    )
+    @option(
+        "aspect_ratio",
+        description="Requested image aspect ratio. Support varies by model.",
+        required=False,
+        type=str,
+        choices=IMAGE_ASPECT_RATIO_CHOICES,
+    )
+    @option(
+        "image_size",
+        description="Requested image size. Support varies by model.",
+        required=False,
+        type=str,
+        choices=IMAGE_SIZE_CHOICES,
+    )
+    @option(
+        "attachment",
+        description="Image to edit or remix. Omit to generate a new image.",
+        required=False,
+        type=Attachment,
+    )
+    async def image(
+        self,
+        ctx: ApplicationContext,
+        prompt: str,
+        model: str | None = None,
+        aspect_ratio: str | None = None,
+        image_size: str | None = None,
+        attachment: Attachment | None = None,
+    ):
+        await run_image_command(
+            self,
+            ctx=ctx,
+            prompt=prompt,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+            attachment=attachment,
+        )
+
+    @openrouter.command(
+        name="tts",
+        description="Converts text to speech audio.",
+    )
+    @option(
+        "input",
+        description="Text to convert to speech. (max length 4096 characters)",
+        required=True,
+        type=str,
+    )
+    @option(
+        "model",
+        description=f"OpenRouter TTS model slug to use. (default: {OPENROUTER_DEFAULT_TTS_MODEL})",
+        required=False,
+        type=str,
+    )
+    @option(
+        "voice",
+        description="Optional voice override. Supported voices vary by model.",
+        required=False,
+        type=str,
+    )
+    @option(
+        "instructions",
+        description="Additional style instructions for the spoken delivery. (default: not set)",
+        required=False,
+        type=str,
+    )
+    @option(
+        "response_format",
+        description="Audio file format. (default: mp3)",
+        required=False,
+        type=str,
+        choices=TTS_FORMAT_CHOICES,
+    )
+    async def tts(
+        self,
+        ctx: ApplicationContext,
+        input: str,
+        model: str | None = None,
+        voice: str | None = None,
+        instructions: str | None = None,
+        response_format: str = "mp3",
+    ):
+        await run_tts_command(
+            self,
+            ctx=ctx,
+            input_text=input,
+            model=model,
+            voice=voice,
+            instructions=instructions,
+            response_format=response_format,
+        )
+
+    @openrouter.command(
+        name="stt",
+        description="Generates text from the input audio.",
+    )
+    @option(
+        "attachment",
+        description="Audio file to transcribe. Max 20 MiB. Common types: mp3, mp4, m4a, wav, ogg, flac.",
+        required=True,
+        type=Attachment,
+    )
+    @option(
+        "model",
+        description=f"OpenRouter STT model slug to use. (default: {OPENROUTER_DEFAULT_STT_MODEL})",
+        required=False,
+        type=str,
+    )
+    @option(
+        "instructions",
+        description="Additional transcription instructions. (default: accurate verbatim transcript)",
+        required=False,
+        type=str,
+    )
+    async def stt(
+        self,
+        ctx: ApplicationContext,
+        attachment: Attachment,
+        model: str | None = None,
+        instructions: str | None = None,
+    ):
+        await run_stt_command(
+            self,
+            ctx=ctx,
+            attachment=attachment,
+            model=model,
+            instructions=instructions,
+        )
