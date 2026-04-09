@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: format and lint staged Python files with ruff.
+# Soft-fails if ruff is not installed (warning only).
+# Format is auto-applied and re-staged; lint violations block the commit.
+
+PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^(src|tests)/.*\.py$')
+
+if [ -z "$PYTHON_FILES" ]; then
+    exit 0
+fi
+
+resolve_ruff() {
+    if [ -f ".venv/bin/ruff" ]; then
+        printf '%s\n' ".venv/bin/ruff"
+        return 0
+    fi
+    if [ -f ".venv/Scripts/ruff.exe" ] && ! grep -qi microsoft /proc/version 2>/dev/null; then
+        printf '%s\n' ".venv/Scripts/ruff.exe"
+        return 0
+    fi
+    if [ -f ".venv/Scripts/ruff" ] && ! grep -qi microsoft /proc/version 2>/dev/null; then
+        printf '%s\n' ".venv/Scripts/ruff"
+        return 0
+    fi
+    if command -v ruff &>/dev/null; then
+        command -v ruff
+        return 0
+    fi
+    return 1
+}
+
+if ! RUFF=$(resolve_ruff); then
+    echo "WARNING: ruff not found in .venv or PATH — skipping Python format/lint checks"
+    exit 0
+fi
+
+echo "$PYTHON_FILES" | xargs "$RUFF" format --config pyproject.toml
+echo "$PYTHON_FILES" | xargs git add
+
+echo "$PYTHON_FILES" | xargs "$RUFF" check --config pyproject.toml
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "ERROR: ruff lint check failed — fix the above issues before committing"
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,15 @@
+.venv/
+.venv-wsl/
+venv/
+.git/
+.github/
+.claude/
+.claudeignore
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.env
+.vscode/
+.DS_Store
+Thumbs.db

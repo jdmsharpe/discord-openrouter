@@ -1,0 +1,101 @@
+import os
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - fallback for minimal test environments
+    def load_dotenv(*_args, **_kwargs):
+        return False
+
+load_dotenv()
+
+TRUE_ENV_VALUES = frozenset({"true", "1", "yes"})
+REQUIRED_ENV_VARS = ("BOT_TOKEN", "OPENROUTER_API_KEY")
+DEFAULT_TEXT_MODEL = "minimax/minimax-m2.7"
+DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview"
+DEFAULT_TTS_MODEL = "openai/gpt-audio"
+DEFAULT_STT_MODEL = "openai/gpt-audio"
+DEFAULT_MODEL = DEFAULT_TEXT_MODEL
+DEFAULT_APP_NAME = "discord-openrouter"
+DEFAULT_MODEL_CACHE_TTL_SECONDS = 300
+
+
+def _get_env_or_none(name: str) -> str | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    stripped_value = value.strip()
+    return stripped_value or None
+
+
+def _parse_guild_ids(raw_guild_ids: str) -> list[int]:
+    guild_ids: list[int] = []
+    for token in raw_guild_ids.split(","):
+        stripped_token = token.strip()
+        if not stripped_token:
+            continue
+        try:
+            guild_ids.append(int(stripped_token))
+        except ValueError as exc:
+            raise RuntimeError(
+                "Invalid GUILD_IDS value. Expected a comma-separated list of integers, "
+                f"but received invalid token: {stripped_token!r}."
+            ) from exc
+    return guild_ids
+
+
+def _parse_bool_env(name: str, default: str = "true") -> bool:
+    return os.getenv(name, default).strip().lower() in TRUE_ENV_VALUES
+
+
+def _parse_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    stripped_value = raw_value.strip()
+    if not stripped_value:
+        return default
+    try:
+        return int(stripped_value)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid {name} value. Expected an integer, got {raw_value!r}.") from exc
+
+
+def validate_required_config() -> None:
+    missing_vars = [name for name in REQUIRED_ENV_VARS if _get_env_or_none(name) is None]
+    if missing_vars:
+        missing_list = ", ".join(missing_vars)
+        raise RuntimeError(
+            "Missing required environment configuration: "
+            f"{missing_list}. Please set these variables before starting the bot."
+        )
+
+
+BOT_TOKEN = _get_env_or_none("BOT_TOKEN")
+GUILD_IDS = _parse_guild_ids(os.getenv("GUILD_IDS", ""))
+OPENROUTER_API_KEY = _get_env_or_none("OPENROUTER_API_KEY")
+OPENROUTER_DEFAULT_TEXT_MODEL = (
+    _get_env_or_none("OPENROUTER_DEFAULT_TEXT_MODEL")
+    or _get_env_or_none("OPENROUTER_DEFAULT_MODEL")
+    or DEFAULT_TEXT_MODEL
+)
+OPENROUTER_DEFAULT_IMAGE_MODEL = (
+    _get_env_or_none("OPENROUTER_DEFAULT_IMAGE_MODEL")
+    or _get_env_or_none("OPENROUTER_IMAGE_MODEL")
+    or DEFAULT_IMAGE_MODEL
+)
+OPENROUTER_DEFAULT_TTS_MODEL = (
+    _get_env_or_none("OPENROUTER_DEFAULT_TTS_MODEL")
+    or _get_env_or_none("OPENROUTER_TTS_MODEL")
+    or DEFAULT_TTS_MODEL
+)
+OPENROUTER_DEFAULT_STT_MODEL = _get_env_or_none("OPENROUTER_DEFAULT_STT_MODEL") or DEFAULT_STT_MODEL
+OPENROUTER_DEFAULT_MODEL = OPENROUTER_DEFAULT_TEXT_MODEL
+OPENROUTER_IMAGE_MODEL = OPENROUTER_DEFAULT_IMAGE_MODEL
+OPENROUTER_TTS_MODEL = OPENROUTER_DEFAULT_TTS_MODEL
+OPENROUTER_SITE_URL = _get_env_or_none("OPENROUTER_SITE_URL")
+OPENROUTER_APP_NAME = _get_env_or_none("OPENROUTER_APP_NAME") or DEFAULT_APP_NAME
+OPENROUTER_MODEL_CACHE_TTL_SECONDS = _parse_int_env(
+    "OPENROUTER_MODEL_CACHE_TTL_SECONDS",
+    DEFAULT_MODEL_CACHE_TTL_SECONDS,
+)
+SHOW_COST_EMBEDS = _parse_bool_env("SHOW_COST_EMBEDS")
