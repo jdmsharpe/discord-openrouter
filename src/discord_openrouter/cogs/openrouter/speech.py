@@ -140,6 +140,7 @@ async def run_tts_command(
             request_cost=request_cost,
             daily_cost=daily_cost,
             details=f"{len(input_text):,} chars · {normalized_voice or 'default voice'}",
+            request_cost_is_estimate=usage.cost is None and request_cost is not None,
         )
 
     extension = "ogg" if response_format == "opus" else response_format
@@ -295,6 +296,7 @@ async def run_stt_command(
             request_cost=request_cost,
             daily_cost=daily_cost,
             details=attachment.filename,
+            request_cost_is_estimate=usage.cost is None and request_cost is not None,
         )
 
     await ctx.followup.send(embeds=embeds)

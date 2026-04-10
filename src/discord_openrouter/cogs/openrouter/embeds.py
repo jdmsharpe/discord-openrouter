@@ -71,10 +71,11 @@ def append_usage_embed(
     request_cost: float | None,
     daily_cost: float | None,
     model_info: ModelInfo | None = None,
+    request_cost_is_estimate: bool = False,
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
-        parts.append(_format_currency_amount(request_cost))
+        parts.append(_format_display_currency_amount(request_cost, estimated=request_cost_is_estimate))
 
     in_part = f"{usage.prompt_tokens:,} tokens in"
     in_details: list[str] = []
@@ -122,10 +123,11 @@ def append_flat_pricing_embed(
     request_cost: float | None,
     daily_cost: float | None,
     details: str | None = None,
+    request_cost_is_estimate: bool = False,
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
-        parts.append(_format_currency_amount(request_cost))
+        parts.append(_format_display_currency_amount(request_cost, estimated=request_cost_is_estimate))
     if details:
         parts.append(details)
     if daily_cost is not None:
@@ -155,6 +157,13 @@ def _append_cost_part(parts: list[str], label: str, amount: float) -> None:
     if amount <= 0:
         return
     parts.append(f"{label} {_format_currency_amount(amount)}")
+
+
+def _format_display_currency_amount(amount: float, *, estimated: bool = False) -> str:
+    value = _format_currency_amount(amount)
+    if estimated and amount > 0:
+        return f"est. {value}"
+    return value
 
 
 def _format_currency_amount(amount: float) -> str:

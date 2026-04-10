@@ -151,6 +151,7 @@ async def run_image_command(
             request_cost=request_cost,
             daily_cost=daily_cost,
             details=_build_pricing_details(mode=mode, aspect_ratio=aspect_ratio, image_size=image_size),
+            request_cost_is_estimate=usage.cost is None and request_cost is not None,
         )
 
     await ctx.followup.send(embeds=embeds, files=files)

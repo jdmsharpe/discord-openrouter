@@ -112,6 +112,27 @@ def test_append_usage_embed_uses_subcent_and_round_up_currency_formatting():
     assert "output <$0.01" in lines[1]
 
 
+def test_append_usage_embed_prefixes_estimated_request_cost():
+    embeds = []
+
+    append_usage_embed(
+        embeds,
+        usage=ChatUsage(
+            prompt_tokens=1,
+            completion_tokens=1,
+        ),
+        request_cost=0.0052,
+        daily_cost=0.0052,
+        request_cost_is_estimate=True,
+    )
+
+    assert len(embeds) == 1
+    description = embeds[0].description
+    assert description is not None
+    assert description.startswith("est. <$0.01")
+    assert "daily <$0.01" in description
+
+
 def test_append_flat_pricing_embed_uses_compact_currency_formatting():
     embeds = []
 
@@ -125,3 +146,19 @@ def test_append_flat_pricing_embed_uses_compact_currency_formatting():
     assert len(embeds) == 1
     description = embeds[0].description
     assert description == "<$0.01 · video generation · daily $1.51"
+
+
+def test_append_flat_pricing_embed_prefixes_estimated_request_cost():
+    embeds = []
+
+    append_flat_pricing_embed(
+        embeds,
+        request_cost=0.0052,
+        daily_cost=1.501,
+        details="video generation",
+        request_cost_is_estimate=True,
+    )
+
+    assert len(embeds) == 1
+    description = embeds[0].description
+    assert description == "est. <$0.01 · video generation · daily $1.51"

@@ -26,7 +26,7 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter through the officia
 - **Reasoning Controls:** Tune reasoning with effort levels, optional reasoning token budgets, and hidden-reasoning mode for supported models.
 - **Reasoning Preservation:** Stores `reasoning_details` in assistant messages so supported reasoning models can continue their chain of thought across turns.
 - **Interactive Controls:** Regenerate, pause/resume, stop, or toggle conversation tools from the persistent controls under each response.
-- **Usage Tracking:** Shows prompt/completion token usage, cache reads and writes, and reported cost when pricing metadata is available.
+- **Usage Tracking:** Shows prompt/completion token usage, cache reads and writes, exact reported cost when OpenRouter includes it, and an `est.`-prefixed local fallback when OpenRouter omits `usage.cost`.
 
 ## Commands
 
@@ -115,6 +115,7 @@ Check whether the bot can read the current channel and message history.
 - **Deprecated PDF alias:** if you still use the deprecated OpenRouter engine name `pdf-text`, this bot normalizes it to `cloudflare-ai`.
 - **Automatic caching:** many OpenRouter providers already enable prompt caching automatically. OpenRouter also handles provider sticky routing for cached conversations. The bot surfaces cache reads and cache writes in the usage embed when OpenRouter reports them.
 - **Prompt caching visibility:** when OpenRouter reports cache activity, the usage embed includes cache reads (`cached_tokens`) and cache writes (`cache_write_tokens`).
+- **Cost display:** when OpenRouter returns `usage.cost`, the bot shows that amount directly. When `usage.cost` is missing, the bot falls back to local pricing metadata and prefixes the per-request amount with `est.` so estimated totals are visually distinct from API-reported totals.
 - **Web search visibility:** when OpenRouter reports server-tool web usage, the usage embed includes the search count and the response can include a Sources embed from standardized `url_citation` annotations.
 - **Reasoning visibility:** reasoning-capable models may return spoilered thinking embeds. Set `exclude_reasoning` on `/openrouter chat` if you want reasoning used internally but omitted from the Discord response when supported.
 - **Video support:** `/openrouter chat` can analyze uploaded video attachments through OpenRouter's chat completions API, and `/openrouter video` uses OpenRouter's asynchronous `/videos` API for video generation.

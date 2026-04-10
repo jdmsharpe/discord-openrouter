@@ -428,6 +428,7 @@ async def _run_conversation_turn(
                 request_cost=request_cost,
                 daily_cost=daily_cost,
                 model_info=model_info,
+                request_cost_is_estimate=usage.cost is None and request_cost is not None,
             )
 
         conversation.append_assistant_message(assistant_message)
