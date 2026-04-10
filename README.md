@@ -19,21 +19,29 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter through the officia
 - **Image Generation:** `/openrouter image` generates or remixes images with models that advertise image output.
 - **Text-to-Speech:** `/openrouter tts` generates spoken audio with models that advertise audio output.
 - **Speech-to-Text:** `/openrouter stt` transcribes uploaded audio with models that advertise audio input and text output.
+- **Web Search:** `/openrouter chat` can enable OpenRouter's normalized web plugin for current-information questions, with source links surfaced in Discord.
+- **Context Compression:** `/openrouter chat` can enable OpenRouter's context-compression plugin to help long conversations fit smaller context windows.
+- **Reasoning Controls:** Tune reasoning with effort levels, optional reasoning token budgets, and hidden-reasoning mode for supported models.
 - **Reasoning Preservation:** Stores `reasoning_details` in assistant messages so supported reasoning models can continue their chain of thought across turns.
 - **Interactive Controls:** Regenerate, pause/resume, or stop a conversation using buttons under each response.
-- **Usage Tracking:** Shows prompt/completion token usage and reported cost when pricing metadata is available.
+- **Usage Tracking:** Shows prompt/completion token usage, cache reads and writes, and reported cost when pricing metadata is available.
 
 ## Commands
 
 ### `/openrouter chat`
 Start a conversation with an OpenRouter model.
 
-- **Core Inputs:** `prompt`, optional `persona`, optional `model`, and optional `attachment`.
-- **Tuning Options:** `temperature`, `top_p`, `max_tokens`, and `reasoning_effort`.
+- **Core Inputs:** `prompt`, optional `persona`, optional `model`, optional `attachment`, and optional `pdf_engine`.
+- **Tuning Options:** `temperature`, `top_p`, `max_tokens`, `context_compression`, `prompt_cache_ttl`, `web_search`, `reasoning_effort`, `reasoning_max_tokens`, and `exclude_reasoning`.
 - **Default Resolution:** If no model is supplied, the bot uses the channel default if one has been saved, otherwise `OPENROUTER_DEFAULT_TEXT_MODEL`.
 - **Attachment Types:** the slash command accepts one optional attachment. After the conversation starts, normal follow-up messages in the channel can include multiple attachments.
 - **Normalization:** images are sent as `image_url`, PDFs as `file`, audio as `input_audio`, video as `video_url`, and other files as `file` payloads using OpenRouter's multimodal content types.
 - **Prompt Ordering:** text is sent before attachments, which matches OpenRouter's recommendation for multimodal prompts.
+- **PDF Controls:** `pdf_engine` can be set to `cloudflare-ai`, `mistral-ocr`, or `native`. If `OPENROUTER_DEFAULT_PDF_ENGINE` is configured, that value is used for PDF attachments unless you override it in the command.
+- **Context Compression:** set `context_compression:true` to request OpenRouter's `context-compression` plugin for the chat turn and subsequent conversation replies. Set `context_compression:false` to explicitly disable OpenRouter's default compression on smaller-context models.
+- **Prompt Caching:** `prompt_cache_ttl` requests explicit top-level Anthropic prompt caching for the conversation with `5m` or `1h`. Other supported OpenRouter providers may still cache automatically even when this option is unset.
+- **Web Search:** set `web_search:true` when you want OpenRouter to browse for current information. When the provider returns `url_citation` annotations, the bot adds a Sources embed with linked results.
+- **Reasoning Notes:** use either `reasoning_effort` or `reasoning_max_tokens` for a request, not both. `exclude_reasoning` keeps model thinking internal when the provider supports hidden reasoning.
 
 ### `/openrouter switch_model`
 Switch the active conversation model, save a per-channel default, or do both.
@@ -89,9 +97,14 @@ Check whether the bot can read the current channel and message history.
 - **Attachment limit:** this bot currently rejects Discord attachments larger than `20 MiB`.
 - **Model compatibility:** OpenRouter accepts the normalized payloads, but the selected model still needs to support the requested input or output modalities. Use `/openrouter models` with `input_modality` and `output_modality` filters when in doubt.
 - **PDF follow-ups:** assistant `annotations` are preserved in conversation history, so follow-up questions about the same PDF can continue using OpenRouter's parsed file context across turns.
-- **PDF parser controls:** OpenRouter supports explicit PDF parser plugins and engine selection, but this bot does not currently expose `plugins.file-parser` configuration in commands or environment variables.
+- **PDF parser controls:** PDF attachments can use the `pdf_engine` slash-command option or `OPENROUTER_DEFAULT_PDF_ENGINE` to request `cloudflare-ai`, `mistral-ocr`, or `native`.
+- **Deprecated PDF alias:** if you still use the deprecated OpenRouter engine name `pdf-text`, this bot normalizes it to `cloudflare-ai`.
+- **Automatic caching:** many OpenRouter providers already enable prompt caching automatically. OpenRouter also handles provider sticky routing for cached conversations. The bot surfaces cache reads and cache writes in the usage embed when OpenRouter reports them.
+- **Prompt caching visibility:** when OpenRouter reports cache activity, the usage embed includes cache reads (`cached_tokens`) and cache writes (`cache_write_tokens`).
+- **Web search visibility:** when OpenRouter reports web usage, the usage embed includes the search count and the response can include a Sources embed from standardized `url_citation` annotations.
+- **Reasoning visibility:** reasoning-capable models may return spoilered thinking embeds. Set `exclude_reasoning` on `/openrouter chat` if you want reasoning used internally but omitted from the Discord response when supported.
 - **Video support:** `/openrouter chat` can forward video attachments through OpenRouter's chat completions API, but the project does not currently expose a dedicated video analysis command or OpenRouter's asynchronous video generation API.
-- **Generated images:** `/openrouter image` downloads returned image payloads and re-uploads them as Discord files. In regular chat, image outputs are summarized in embeds rather than re-attached as files.
+- **Generated images:** `/openrouter image` downloads returned image payloads and re-uploads them as Discord files. In regular chat, generated image outputs are also re-attached as Discord files when the model returns image payloads.
 
 ## Setup & Installation
 
@@ -142,8 +155,10 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter image` (default: `google/gemini-3.1-flash-image-preview`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter tts` (default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter stt` (default: `openai/gpt-audio`) |
+| `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default PDF parsing engine for `/openrouter chat` PDF attachments. Supported values: `cloudflare-ai`, `mistral-ocr`, `native`. Deprecated `pdf-text` is normalized to `cloudflare-ai`. |
 | `OPENROUTER_SITE_URL` | No | Optional `HTTP-Referer` sent to OpenRouter |
-| `OPENROUTER_APP_NAME` | No | Optional app name sent as the OpenRouter title header |
+| `OPENROUTER_APP_NAME` | No | Optional app name sent as the OpenRouter `X-OpenRouter-Title` header |
+| `OPENROUTER_APP_CATEGORIES` | No | Optional comma-separated OpenRouter marketplace categories sent as `X-OpenRouter-Categories` on the bot's direct HTTP requests |
 | `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | Seconds to cache model metadata before refreshing (default: `300`) |
 | `SHOW_COST_EMBEDS` | No | Show usage/cost embeds (default: `true`) |
 
@@ -192,6 +207,17 @@ bot.add_cog(OpenRouterCog(bot=bot))
 6. Use `/openrouter image prompt:...` to generate or remix images with OpenRouter image-capable models.
 7. Use `/openrouter tts input:...` to generate spoken audio with OpenRouter audio-capable models.
 8. Use `/openrouter stt attachment:...` to transcribe uploaded audio with OpenRouter audio-input models.
+9. Use `/openrouter chat web_search:true prompt:...` when you want current information with linked sources.
+10. Use `/openrouter chat context_compression:true prompt:...` for long-running threads that may hit smaller context windows.
+
+### Multimodal Examples
+
+- Summarize a PDF with OCR enabled: `/openrouter chat prompt:Summarize this contract attachment:<pdf> pdf_engine:mistral-ocr`
+- Ask about an uploaded image: `/openrouter chat prompt:Describe the scene and read any visible text attachment:<image>`
+- Analyze a video clip with a video-capable model: `/openrouter chat model:<video-model> prompt:What happens in this clip? attachment:<video>`
+- Start a PDF conversation with the default parser from `.env`, then ask follow-up questions in the same channel without re-uploading the document.
+- Search the web for up-to-date info: `/openrouter chat web_search:true prompt:What changed in OpenRouter this week?`
+- Start a cached Claude conversation: `/openrouter chat model:anthropic/claude-sonnet-4.5 prompt_cache_ttl:1h prompt:Use this rubric for all later answers...`
 
 ## Development
 

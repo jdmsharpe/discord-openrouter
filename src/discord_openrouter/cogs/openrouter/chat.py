@@ -6,27 +6,43 @@ from typing import Any
 
 from discord import ApplicationContext, Attachment, Colour, Embed, HTTPException, Interaction, Message, TextChannel
 
-from ...config import OPENROUTER_DEFAULT_TEXT_MODEL, SHOW_COST_EMBEDS
+from ...config import OPENROUTER_DEFAULT_PDF_ENGINE, OPENROUTER_DEFAULT_TEXT_MODEL, SHOW_COST_EMBEDS
 from ...util import (
+    build_context_compression_plugins,
+    build_prompt_cache_control,
+    build_web_plugins,
     ChatSettings,
     Conversation,
+    build_pdf_plugins,
     calculate_cost,
+    describe_chat_settings,
+    extract_url_citations,
     extract_message_text,
     extract_reasoning_text,
     extract_usage,
+    normalize_pdf_engine,
+    prompt_cache_supported_for_model,
     sanitize_assistant_message,
     truncate_text,
 )
-from .attachments import AttachmentInputError, build_attachment_parts, build_user_content
+from .attachments import (
+    AttachmentInputError,
+    AttachmentRequirements,
+    build_attachment_parts,
+    build_user_content,
+    summarize_attachment_parts,
+)
 from .client import OpenRouterApiError
 from .embeds import (
+    append_citations_embed,
     append_reasoning_embeds,
     append_response_embeds,
     append_usage_embed,
     build_model_status_embed,
     error_embed,
 )
-from .state import create_button_view, find_active_conversation, remember_view_state, track_daily_cost
+from .image import build_image_assets, build_image_files
+from .state import find_active_conversation, remember_view_state, track_daily_cost
 
 
 async def keep_typing(channel) -> None:
@@ -79,10 +95,16 @@ async def run_chat_command(
     model: str | None = None,
     persona: str | None = None,
     attachment: Attachment | None = None,
+    pdf_engine: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
     max_tokens: int | None = None,
+    context_compression: bool | None = None,
+    prompt_cache_ttl: str | None = None,
+    web_search: bool = False,
     reasoning_effort: str | None = None,
+    reasoning_max_tokens: int | None = None,
+    exclude_reasoning: bool = False,
 ) -> None:
     await ctx.defer()
 
@@ -102,6 +124,39 @@ async def run_chat_command(
         channel_id=channel.id,
         user_id=user.id,
     )
+    try:
+        resolved_pdf_engine = (
+            normalize_pdf_engine(pdf_engine)
+            if pdf_engine is not None
+            else OPENROUTER_DEFAULT_PDF_ENGINE
+        )
+    except ValueError as error:
+        await ctx.followup.send(embed=error_embed(str(error)))
+        return
+    if reasoning_effort and reasoning_max_tokens is not None:
+        await ctx.followup.send(
+            embed=error_embed(
+                "Use either `reasoning_effort` or `reasoning_max_tokens`, not both."
+            )
+        )
+        return
+    if reasoning_max_tokens is not None and reasoning_max_tokens <= 0:
+        await ctx.followup.send(
+            embed=error_embed("`reasoning_max_tokens` must be greater than zero.")
+        )
+        return
+    prompt_cache_error = _validate_prompt_cache_request(
+        model=resolved_model,
+        prompt_cache_ttl=prompt_cache_ttl,
+    )
+    if prompt_cache_error:
+        await ctx.followup.send(embed=error_embed(prompt_cache_error))
+        return
+    try:
+        cache_control = build_prompt_cache_control(prompt_cache_ttl)
+    except ValueError as error:
+        await ctx.followup.send(embed=error_embed(str(error)))
+        return
 
     try:
         attachment_parts = await build_attachment_parts([attachment] if attachment else [])
@@ -111,6 +166,12 @@ async def run_chat_command(
     except Exception as error:
         cog.logger.error("Failed to normalize slash attachment: %s", error, exc_info=True)
         await ctx.followup.send(embed=error_embed("Failed to process the provided attachment."))
+        return
+
+    attachment_requirements = summarize_attachment_parts(attachment_parts)
+    validation_error = _validate_model_input_modalities(model_info, attachment_requirements)
+    if validation_error:
+        await ctx.followup.send(embed=error_embed(validation_error))
         return
 
     user_content = build_user_content(prompt, attachment_parts)
@@ -128,7 +189,13 @@ async def run_chat_command(
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
+            context_compression=context_compression,
+            prompt_cache_ttl=prompt_cache_ttl,
+            web_search=web_search,
             reasoning_effort=reasoning_effort,
+            reasoning_max_tokens=reasoning_max_tokens,
+            exclude_reasoning=exclude_reasoning,
+            pdf_engine=resolved_pdf_engine,
         ),
     )
     conversation.append_user_message({"role": "user", "content": user_content})
@@ -141,10 +208,18 @@ async def run_chat_command(
         user_id=user.id,
         channel=channel,
         model_info_hint=model_info,
+        request_plugins=_build_request_plugins(
+            attachment_requirements=attachment_requirements,
+            pdf_engine=resolved_pdf_engine,
+            context_compression=context_compression,
+            web_search=web_search,
+        ),
+        request_cache_control=cache_control,
         intro_embeds=[
             build_model_status_embed(
                 title="Conversation Started",
                 model=resolved_model,
+                description=_build_chat_settings_description(conversation.settings),
                 model_info=model_info,
             )
         ],
@@ -167,6 +242,19 @@ async def handle_new_message_in_conversation(cog, message: Message, conversation
         await message.reply(embed=error_embed("Failed to process one or more attachments."))
         return
 
+    attachment_requirements = summarize_attachment_parts(attachment_parts)
+    model_info = None
+    if attachment_requirements.required_input_modalities:
+        try:
+            model_info = await cog.openrouter_client.get_model(conversation.settings.model)
+        except OpenRouterApiError as error:
+            await message.reply(embed=error_embed(str(error)))
+            return
+        validation_error = _validate_model_input_modalities(model_info, attachment_requirements)
+        if validation_error:
+            await message.reply(embed=error_embed(validation_error))
+            return
+
     user_content = build_user_content(message.content, attachment_parts)
     if not user_content:
         return
@@ -178,6 +266,14 @@ async def handle_new_message_in_conversation(cog, message: Message, conversation
         send_reply=message.reply,
         user_id=message.author.id,
         channel=message.channel,
+        model_info_hint=model_info,
+        request_plugins=_build_request_plugins(
+            attachment_requirements=attachment_requirements,
+            pdf_engine=conversation.settings.pdf_engine,
+            context_compression=conversation.settings.context_compression,
+            web_search=conversation.settings.web_search,
+        ),
+        request_cache_control=build_prompt_cache_control(conversation.settings.prompt_cache_ttl),
     )
     if not success:
         _remove_last_user_message(conversation)
@@ -199,12 +295,21 @@ async def regenerate_conversation_response(cog, interaction: Interaction, conver
         )
         return
 
+    attachment_requirements = _summarize_last_user_attachment_requirements(conversation)
+
     success = await _run_conversation_turn(
         cog,
         conversation=conversation,
         send_reply=channel.send,
         user_id=interaction.user.id,
         channel=channel,
+        request_plugins=_build_request_plugins(
+            attachment_requirements=attachment_requirements,
+            pdf_engine=conversation.settings.pdf_engine,
+            context_compression=conversation.settings.context_compression,
+            web_search=conversation.settings.web_search,
+        ),
+        request_cache_control=build_prompt_cache_control(conversation.settings.prompt_cache_ttl),
     )
     if not success and removed_assistant is not None:
         conversation.append_assistant_message(removed_assistant)
@@ -218,6 +323,8 @@ async def _run_conversation_turn(
     user_id: int,
     channel,
     model_info_hint=None,
+    request_plugins: list[dict[str, Any]] | None = None,
+    request_cache_control: dict[str, Any] | None = None,
     intro_embeds: list[Embed] | None = None,
 ) -> bool:
     typing_task = asyncio.create_task(keep_typing(channel))
@@ -227,10 +334,14 @@ async def _run_conversation_turn(
         response_payload = await cog.openrouter_client.create_chat_completion(
             model=conversation.settings.model,
             messages=conversation.build_api_messages(),
+            plugins=request_plugins,
+            cache_control=request_cache_control,
             temperature=conversation.settings.temperature,
             top_p=conversation.settings.top_p,
             max_tokens=conversation.settings.max_tokens,
             reasoning_effort=conversation.settings.reasoning_effort,
+            reasoning_max_tokens=conversation.settings.reasoning_max_tokens,
+            exclude_reasoning=conversation.settings.exclude_reasoning,
             user=str(user_id),
             session_id=str(conversation.conversation_id),
         )
@@ -245,7 +356,19 @@ async def _run_conversation_turn(
 
         assistant_message = sanitize_assistant_message(message_payload)
         reasoning_text = extract_reasoning_text(assistant_message)
+        citations = extract_url_citations(assistant_message)
         response_text = extract_message_text(assistant_message)
+        image_assets: list[tuple[str, bytes]] = []
+        if assistant_message.get("images"):
+            try:
+                image_assets = await build_image_assets(
+                    assistant_message.get("images") or [],
+                    filename_prefix="chat_image",
+                )
+            except Exception as error:
+                cog.logger.warning(
+                    "Failed to prepare generated chat images: %s", error, exc_info=True
+                )
         usage = extract_usage(response_payload)
         tool_call_counts = _extract_tool_call_counts(assistant_message)
         model_info = model_info_hint or await cog.openrouter_client.get_model(conversation.settings.model)
@@ -270,8 +393,14 @@ async def _run_conversation_turn(
 
         embeds: list[Embed] = list(intro_embeds or [])
         append_reasoning_embeds(embeds, reasoning_text)
-        append_response_embeds(embeds, response_text)
-        _append_image_embeds(embeds, assistant_message)
+        if response_text or not image_assets:
+            append_response_embeds(embeds, response_text)
+        append_citations_embed(embeds, citations)
+        _append_image_embeds(
+            embeds,
+            assistant_message,
+            attached_filenames=[filename for filename, _ in image_assets],
+        )
         if SHOW_COST_EMBEDS:
             append_usage_embed(
                 embeds,
@@ -285,10 +414,22 @@ async def _run_conversation_turn(
         view = cog._create_button_view(user_id, conversation.conversation_id)
 
         try:
-            reply_message = await send_reply(embeds=embeds, view=view)
+            send_kwargs: dict[str, Any] = {
+                "embeds": embeds,
+                "view": view,
+            }
+            if image_assets:
+                send_kwargs["files"] = build_image_files(image_assets)
+            reply_message = await send_reply(**send_kwargs)
         except HTTPException:
             fallback_text = response_text or "No text content returned."
-            reply_message = await send_reply(content=truncate_text(fallback_text, 1900), view=view)
+            fallback_kwargs: dict[str, Any] = {
+                "content": truncate_text(fallback_text, 1900),
+                "view": view,
+            }
+            if image_assets:
+                fallback_kwargs["files"] = build_image_files(image_assets)
+            reply_message = await send_reply(**fallback_kwargs)
 
         remember_view_state(cog, user_id, conversation.conversation_id, view, reply_message)
         return True
@@ -328,8 +469,14 @@ def _remove_last_user_message(conversation: Conversation) -> None:
         conversation.touch()
 
 
-def _append_image_embeds(embeds: list[Embed], assistant_message: dict[str, Any]) -> None:
+def _append_image_embeds(
+    embeds: list[Embed],
+    assistant_message: dict[str, Any],
+    *,
+    attached_filenames: list[str] | None = None,
+) -> None:
     images = assistant_message.get("images") or []
+    filenames = list(attached_filenames or [])
     for index, image_payload in enumerate(images[:4], start=1):
         if not isinstance(image_payload, dict):
             continue
@@ -340,13 +487,76 @@ def _append_image_embeds(embeds: list[Embed], assistant_message: dict[str, Any])
             description = image_url
         else:
             description = "Model returned an image attachment."
-        embeds.append(
-            Embed(
-                title="Generated Image" if index == 1 else f"Generated Image ({index})",
-                description=description,
-                color=Colour.green(),
-            )
+        embed = Embed(
+            title="Generated Image" if index == 1 else f"Generated Image ({index})",
+            description=description,
+            color=Colour.green(),
         )
+        if index <= len(filenames):
+            embed.set_image(url=f"attachment://{filenames[index - 1]}")
+        embeds.append(embed)
+
+
+def _build_request_plugins(
+    *,
+    attachment_requirements: AttachmentRequirements,
+    pdf_engine: str | None,
+    context_compression: bool | None = None,
+    web_search: bool = False,
+) -> list[dict[str, Any]] | None:
+    plugins: list[dict[str, Any]] = []
+    if attachment_requirements.has_pdf:
+        plugins.extend(build_pdf_plugins(pdf_engine) or [])
+    plugins.extend(build_context_compression_plugins(context_compression) or [])
+    if web_search:
+        plugins.extend(build_web_plugins())
+    return plugins or None
+
+
+def _validate_prompt_cache_request(*, model: str, prompt_cache_ttl: str | None) -> str | None:
+    if not prompt_cache_ttl:
+        return None
+    if prompt_cache_supported_for_model(model):
+        return None
+    return (
+        "`prompt_cache_ttl` currently targets Anthropic chat models on OpenRouter. "
+        "Most other providers already use automatic prompt caching when supported."
+    )
+
+
+def _build_chat_settings_description(settings: ChatSettings) -> str | None:
+    summary = describe_chat_settings(settings)
+    if not summary:
+        return None
+    return f"**Options:** {summary}"
+
+
+def _validate_model_input_modalities(
+    model_info,
+    attachment_requirements: AttachmentRequirements,
+) -> str | None:
+    if model_info is None or not attachment_requirements.required_input_modalities:
+        return None
+
+    supported_modalities = {modality.casefold() for modality in model_info.input_modalities}
+    missing_modalities = sorted(
+        modality
+        for modality in attachment_requirements.required_input_modalities
+        if modality.casefold() not in supported_modalities
+    )
+    if not missing_modalities:
+        return None
+
+    if len(missing_modalities) == 1:
+        return (
+            f"`{model_info.id}` does not advertise `{missing_modalities[0]}` input "
+            "in the OpenRouter catalog."
+        )
+    formatted_modalities = ", ".join(f"`{modality}`" for modality in missing_modalities)
+    return (
+        f"`{model_info.id}` does not advertise the required input modalities "
+        f"in the OpenRouter catalog: {formatted_modalities}."
+    )
 
 
 def _extract_tool_call_counts(message: dict[str, Any]) -> dict[str, int]:
@@ -377,3 +587,21 @@ def _format_tool_counts(counts: dict[str, int]) -> str:
     if not counts:
         return "none"
     return ", ".join(f"{name} x{count}" for name, count in sorted(counts.items()))
+
+
+def _summarize_last_user_attachment_requirements(
+    conversation: Conversation,
+) -> AttachmentRequirements:
+    for message in reversed(conversation.messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            return AttachmentRequirements()
+        attachment_parts = [
+            item
+            for item in content
+            if isinstance(item, dict) and str(item.get("type") or "").strip().lower() != "text"
+        ]
+        return summarize_attachment_parts(attachment_parts)
+    return AttachmentRequirements()

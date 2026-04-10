@@ -6,6 +6,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 CHUNK_TEXT_SIZE = 3500
+PDF_ENGINE_ALIASES = {
+    "pdf-text": "cloudflare-ai",
+}
+SUPPORTED_PDF_ENGINES = ("cloudflare-ai", "mistral-ocr", "native")
+SUPPORTED_PROMPT_CACHE_TTLS = ("5m", "1h")
 
 
 @dataclass(slots=True)
@@ -36,6 +41,11 @@ class ChatUsage:
     total_tokens: int = 0
     reasoning_tokens: int = 0
     cached_tokens: int = 0
+    cache_write_tokens: int = 0
+    input_audio_tokens: int = 0
+    input_video_tokens: int = 0
+    output_audio_tokens: int = 0
+    output_image_tokens: int = 0
     cost: float | None = None
     server_tool_use: dict[str, int] = field(default_factory=dict)
 
@@ -47,7 +57,13 @@ class ChatSettings:
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
+    web_search: bool = False
+    context_compression: bool | None = None
+    prompt_cache_ttl: str | None = None
     reasoning_effort: str | None = None
+    reasoning_max_tokens: int | None = None
+    exclude_reasoning: bool = False
+    pdf_engine: str | None = None
 
 
 @dataclass(slots=True)
@@ -123,6 +139,16 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
         or ((usage.get("output_tokens_details") or {}).get("reasoning_tokens"))
     )
     cached_tokens = _safe_int(prompt_details.get("cached_tokens"))
+    cache_write_tokens = _safe_int(prompt_details.get("cache_write_tokens"))
+    input_audio_tokens = _safe_int(prompt_details.get("audio_tokens"))
+    input_video_tokens = _safe_int(prompt_details.get("video_tokens"))
+    completion_details = (
+        usage.get("completion_tokens_details")
+        or usage.get("output_tokens_details")
+        or {}
+    )
+    output_audio_tokens = _safe_int(completion_details.get("audio_tokens"))
+    output_image_tokens = _safe_int(completion_details.get("image_tokens"))
     if total_tokens == 0:
         total_tokens = prompt_tokens + completion_tokens
     return ChatUsage(
@@ -131,6 +157,11 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
         total_tokens=total_tokens,
         reasoning_tokens=reasoning_tokens,
         cached_tokens=cached_tokens,
+        cache_write_tokens=cache_write_tokens,
+        input_audio_tokens=input_audio_tokens,
+        input_video_tokens=input_video_tokens,
+        output_audio_tokens=output_audio_tokens,
+        output_image_tokens=output_image_tokens,
         cost=_safe_float_or_none(usage.get("cost")),
         server_tool_use=_coerce_int_mapping(usage.get("server_tool_use")),
     )
@@ -210,6 +241,41 @@ def extract_reasoning_text(message: dict[str, Any]) -> str:
     return "\n\n".join(part for part in parts if part)
 
 
+def extract_url_citations(message: dict[str, Any]) -> list[dict[str, str]]:
+    annotations = message.get("annotations") or []
+    if not isinstance(annotations, list):
+        return []
+
+    citations: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
+    for annotation in annotations:
+        if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
+            continue
+        citation_payload = annotation.get("url_citation") or {}
+        if not isinstance(citation_payload, dict):
+            continue
+
+        url = citation_payload.get("url")
+        if not isinstance(url, str):
+            continue
+        normalized_url = url.strip()
+        if not normalized_url or normalized_url in seen_urls:
+            continue
+
+        title = citation_payload.get("title")
+        content = citation_payload.get("content")
+        seen_urls.add(normalized_url)
+        citations.append(
+            {
+                "url": normalized_url,
+                "title": title.strip() if isinstance(title, str) and title.strip() else normalized_url,
+                "content": content.strip() if isinstance(content, str) else "",
+            }
+        )
+
+    return citations
+
+
 def chunk_text(text: str, *, chunk_size: int = CHUNK_TEXT_SIZE) -> list[str]:
     normalized = text.strip()
     if not normalized:
@@ -223,10 +289,90 @@ def truncate_text(text: str, limit: int = 4000) -> str:
     return text[: limit - 3] + "..."
 
 
+def normalize_pdf_engine(value: str | None) -> str | None:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return None
+    normalized = PDF_ENGINE_ALIASES.get(normalized, normalized)
+    if normalized not in SUPPORTED_PDF_ENGINES:
+        supported = ", ".join(f"`{engine}`" for engine in SUPPORTED_PDF_ENGINES)
+        raise ValueError(f"Unsupported PDF engine `{value}`. Supported values: {supported}.")
+    return normalized
+
+
+def build_pdf_plugins(pdf_engine: str | None) -> list[dict[str, Any]] | None:
+    normalized = normalize_pdf_engine(pdf_engine)
+    if normalized is None:
+        return None
+    return [
+        {
+            "id": "file-parser",
+            "pdf": {
+                "engine": normalized,
+            },
+        }
+    ]
+
+
+def build_web_plugins() -> list[dict[str, Any]]:
+    return [{"id": "web"}]
+
+
+def build_context_compression_plugins(enabled: bool | None) -> list[dict[str, Any]] | None:
+    if enabled is None:
+        return None
+    if enabled:
+        return [{"id": "context-compression"}]
+    return [{"id": "context-compression", "enabled": False}]
+
+
+def build_prompt_cache_control(ttl: str | None) -> dict[str, Any] | None:
+    normalized = (ttl or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized not in SUPPORTED_PROMPT_CACHE_TTLS:
+        supported = ", ".join(f"`{value}`" for value in SUPPORTED_PROMPT_CACHE_TTLS)
+        raise ValueError(
+            f"Unsupported prompt cache TTL `{ttl}`. Supported values: {supported}."
+        )
+
+    payload: dict[str, Any] = {"type": "ephemeral"}
+    if normalized != "5m":
+        payload["ttl"] = normalized
+    return payload
+
+
 def describe_modalities(model_info: ModelInfo) -> str:
     inputs = ", ".join(model_info.input_modalities or ["text"])
     outputs = ", ".join(model_info.output_modalities or ["text"])
     return f"in: {inputs} | out: {outputs}"
+
+
+def prompt_cache_supported_for_model(model: str) -> bool:
+    return model.casefold().startswith("anthropic/")
+
+
+def describe_chat_settings(settings: ChatSettings) -> str | None:
+    parts: list[str] = []
+    if settings.pdf_engine:
+        parts.append(f"pdf `{settings.pdf_engine}`")
+    if settings.context_compression is True:
+        parts.append("context compression")
+    elif settings.context_compression is False:
+        parts.append("context compression off")
+    if settings.prompt_cache_ttl:
+        parts.append(f"prompt cache `{settings.prompt_cache_ttl}`")
+    if settings.web_search:
+        parts.append("web search")
+    if settings.reasoning_max_tokens is not None:
+        parts.append(f"reasoning `{settings.reasoning_max_tokens}` tokens")
+    elif settings.reasoning_effort:
+        parts.append(f"reasoning `{settings.reasoning_effort}`")
+    if settings.exclude_reasoning:
+        parts.append("hidden reasoning")
+    if not parts:
+        return None
+    return ", ".join(parts)
 
 
 def _safe_float(value: Any) -> float:

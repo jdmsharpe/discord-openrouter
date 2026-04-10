@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from dataclasses import dataclass, field
 from typing import Any, Protocol, Sequence
 
 import httpx
@@ -30,6 +31,12 @@ class AttachmentLike(Protocol):
 
 class AttachmentInputError(RuntimeError):
     """Raised when a Discord attachment cannot be normalized for OpenRouter."""
+
+
+@dataclass(slots=True, frozen=True)
+class AttachmentRequirements:
+    required_input_modalities: frozenset[str] = field(default_factory=frozenset)
+    has_pdf: bool = False
 
 
 async def build_attachment_parts(attachments: Sequence[AttachmentLike]) -> list[dict[str, Any]]:
@@ -108,6 +115,42 @@ def build_user_content(prompt: str | None, attachment_parts: Sequence[dict[str, 
         parts.append({"type": "text", "text": normalized_prompt})
     parts.extend(attachment_parts)
     return parts
+
+
+def summarize_attachment_parts(attachment_parts: Sequence[dict[str, Any]]) -> AttachmentRequirements:
+    required_input_modalities: set[str] = set()
+    has_pdf = False
+
+    for part in attachment_parts:
+        part_type = str(part.get("type") or "").strip().lower()
+        if part_type == "image_url":
+            required_input_modalities.add("image")
+            continue
+        if part_type == "input_audio":
+            required_input_modalities.add("audio")
+            continue
+        if part_type == "video_url":
+            required_input_modalities.add("video")
+            continue
+        if part_type != "file":
+            continue
+
+        file_payload = part.get("file") or {}
+        if not isinstance(file_payload, dict):
+            required_input_modalities.add("file")
+            continue
+
+        filename = str(file_payload.get("filename") or "").strip().lower()
+        file_data = str(file_payload.get("file_data") or "").strip().lower()
+        if filename.endswith(".pdf") or file_data.startswith("data:application/pdf"):
+            has_pdf = True
+        else:
+            required_input_modalities.add("file")
+
+    return AttachmentRequirements(
+        required_input_modalities=frozenset(required_input_modalities),
+        has_pdf=has_pdf,
+    )
 
 
 async def _download_attachment_bytes(url: str) -> bytes:

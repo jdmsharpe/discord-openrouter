@@ -8,11 +8,13 @@ from discord.ext import commands, tasks
 
 from ...config import (
     GUILD_IDS,
+    OPENROUTER_DEFAULT_PDF_ENGINE,
     OPENROUTER_DEFAULT_IMAGE_MODEL,
     OPENROUTER_DEFAULT_STT_MODEL,
     OPENROUTER_DEFAULT_TEXT_MODEL,
     OPENROUTER_DEFAULT_TTS_MODEL,
 )
+from ...util import describe_chat_settings, prompt_cache_supported_for_model
 from .chat import (
     handle_check_permissions,
     handle_on_message,
@@ -28,6 +30,8 @@ from .command_options import (
     MODEL_INPUT_MODALITY_CHOICES,
     MODEL_OUTPUT_MODALITY_CHOICES,
     MODEL_SCOPE_CHOICES,
+    PDF_ENGINE_CHOICES,
+    PROMPT_CACHE_TTL_CHOICES,
     REASONING_EFFORT_CHOICES,
     TTS_FORMAT_CHOICES,
 )
@@ -151,6 +155,16 @@ class OpenRouterCog(commands.Cog):
         type=Attachment,
     )
     @option(
+        "pdf_engine",
+        description=(
+            "Preferred PDF parsing engine for PDF attachments. "
+            f"(default: {OPENROUTER_DEFAULT_PDF_ENGINE or 'OpenRouter-managed'})"
+        ),
+        required=False,
+        type=str,
+        choices=PDF_ENGINE_CHOICES,
+    )
+    @option(
         "temperature",
         description="Sampling temperature.",
         required=False,
@@ -169,11 +183,42 @@ class OpenRouterCog(commands.Cog):
         type=int,
     )
     @option(
+        "context_compression",
+        description="Optional override for OpenRouter context compression. Set false to disable default compression on smaller-context models.",
+        required=False,
+        type=bool,
+    )
+    @option(
+        "prompt_cache_ttl",
+        description="Explicit Anthropic prompt caching TTL for this conversation.",
+        required=False,
+        type=str,
+        choices=PROMPT_CACHE_TTL_CHOICES,
+    )
+    @option(
+        "web_search",
+        description="Enable OpenRouter web search for current information. (default: false)",
+        required=False,
+        type=bool,
+    )
+    @option(
         "reasoning_effort",
         description="Reasoning effort for supported models.",
         required=False,
         type=str,
         choices=REASONING_EFFORT_CHOICES,
+    )
+    @option(
+        "reasoning_max_tokens",
+        description="Optional reasoning token budget for supported models.",
+        required=False,
+        type=int,
+    )
+    @option(
+        "exclude_reasoning",
+        description="Let the model think internally but omit reasoning blocks from the response when supported.",
+        required=False,
+        type=bool,
     )
     async def chat(
         self,
@@ -182,10 +227,16 @@ class OpenRouterCog(commands.Cog):
         persona: str | None = None,
         model: str | None = None,
         attachment: Attachment | None = None,
+        pdf_engine: str | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
+        context_compression: bool | None = None,
+        prompt_cache_ttl: str | None = None,
+        web_search: bool | None = None,
         reasoning_effort: str | None = None,
+        reasoning_max_tokens: int | None = None,
+        exclude_reasoning: bool | None = None,
     ):
         await run_chat_command(
             self,
@@ -194,10 +245,16 @@ class OpenRouterCog(commands.Cog):
             model=model,
             persona=persona,
             attachment=attachment,
+            pdf_engine=pdf_engine,
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
+            context_compression=context_compression,
+            prompt_cache_ttl=prompt_cache_ttl,
+            web_search=bool(web_search),
             reasoning_effort=reasoning_effort,
+            reasoning_max_tokens=reasoning_max_tokens,
+            exclude_reasoning=bool(exclude_reasoning),
         )
 
     @openrouter.command(
@@ -263,6 +320,11 @@ class OpenRouterCog(commands.Cog):
         channel_default = self.channel_model_defaults.get((channel_id, user_id))
         embed = build_current_model_embed(
             active_model=active_conversation.settings.model if active_conversation else None,
+            active_options=(
+                describe_chat_settings(active_conversation.settings)
+                if active_conversation is not None
+                else None
+            ),
             channel_default=channel_default,
             global_default=OPENROUTER_DEFAULT_TEXT_MODEL,
         )
@@ -312,8 +374,17 @@ class OpenRouterCog(commands.Cog):
                     lines.append("**Conversation:** no active conversation to update")
             else:
                 active_conversation.settings.model = resolved_model
+                if (
+                    active_conversation.settings.prompt_cache_ttl
+                    and not prompt_cache_supported_for_model(resolved_model)
+                ):
+                    active_conversation.settings.prompt_cache_ttl = None
+                    lines.append("**Prompt cache:** cleared (not supported by the new model)")
                 active_conversation.touch()
                 lines.append("**Conversation:** updated")
+                active_options = describe_chat_settings(active_conversation.settings)
+                if active_options:
+                    lines.append(f"**Active options:** {active_options}")
 
         if resolved_scope in {"channel", "both"} and (
             "**Channel default:** updated (fallback)" not in lines

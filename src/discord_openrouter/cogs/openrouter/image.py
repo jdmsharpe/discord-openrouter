@@ -105,7 +105,8 @@ async def run_image_command(
         return
 
     assistant_message = sanitize_assistant_message(message_payload)
-    files = await _build_image_files(assistant_message.get("images") or [])
+    image_assets = await build_image_assets(assistant_message.get("images") or [])
+    files = build_image_files(image_assets)
     if not files:
         await ctx.followup.send(
             embed=error_embed("The model responded, but no images were returned in the response payload.")
@@ -210,8 +211,10 @@ def _build_pricing_details(*, mode: str, aspect_ratio: str | None, image_size: s
     return " · ".join(details)
 
 
-async def _build_image_files(images: list[dict[str, Any]]) -> list[File]:
-    files: list[File] = []
+async def build_image_assets(
+    images: list[dict[str, Any]], *, filename_prefix: str = "image"
+) -> list[tuple[str, bytes]]:
+    assets: list[tuple[str, bytes]] = []
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         for index, image in enumerate(images, start=1):
             raw_url = ((image.get("image_url") or {}).get("url")) or image.get("url")
@@ -224,8 +227,15 @@ async def _build_image_files(images: list[dict[str, Any]]) -> list[File]:
                 response.raise_for_status()
                 image_bytes = response.content
                 extension = _guess_extension_from_url(raw_url)
-            files.append(File(io.BytesIO(image_bytes), filename=f"image_{index}.{extension}"))
-    return files
+            assets.append((f"{filename_prefix}_{index}.{extension}", image_bytes))
+    return assets
+
+
+def build_image_files(image_assets: list[tuple[str, bytes]]) -> list[File]:
+    return [
+        File(io.BytesIO(image_bytes), filename=filename)
+        for filename, image_bytes in image_assets
+    ]
 
 
 def _decode_data_url(data_url: str) -> tuple[bytes, str]:
@@ -243,4 +253,4 @@ def _guess_extension_from_url(url: str) -> str:
     return "png"
 
 
-__all__ = ["run_image_command"]
+__all__ = ["build_image_assets", "build_image_files", "run_image_command"]
