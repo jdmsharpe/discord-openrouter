@@ -8,7 +8,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import httpx
+    pass
 
 from ...config import (
     OPENROUTER_API_KEY,
@@ -241,7 +241,9 @@ class OpenRouterClient:
         models = await self._get_cached_models(refresh=refresh)
         if input_modality:
             models = [
-                model for model in models if input_modality.casefold() in _casefolded(model.input_modalities)
+                model
+                for model in models
+                if input_modality.casefold() in _casefolded(model.input_modalities)
             ]
         if output_modality:
             models = [
@@ -308,17 +310,21 @@ class OpenRouterClient:
         import httpx
 
         timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            async with client.stream(
+        async with (
+            httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client,
+            client.stream(
                 "POST",
                 f"{OPENROUTER_BASE_URL}/chat/completions",
                 headers=self._request_headers(),
                 json=payload,
-            ) as response:
-                if response.status_code >= 400:
-                    body = await response.aread()
-                    raise OpenRouterApiError(_extract_error_message_from_bytes(response.status_code, body))
-                return await _collect_audio_stream(response.aiter_lines())
+            ) as response,
+        ):
+            if response.status_code >= 400:
+                body = await response.aread()
+                raise OpenRouterApiError(
+                    _extract_error_message_from_bytes(response.status_code, body)
+                )
+            return await _collect_audio_stream(response.aiter_lines())
 
     async def _fetch_models_from_api(self) -> list[ModelInfo]:
         import httpx
@@ -410,7 +416,7 @@ async def _collect_audio_stream(lines) -> dict[str, Any]:
         if isinstance(chunk.get("usage"), dict):
             usage = chunk["usage"]
 
-        choice = ((chunk.get("choices") or [None])[0])
+        choice = (chunk.get("choices") or [None])[0]
         if not isinstance(choice, dict):
             continue
         delta = choice.get("delta") or {}

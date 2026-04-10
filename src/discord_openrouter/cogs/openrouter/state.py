@@ -60,7 +60,9 @@ async def _drop_conversation_view_state(cog, conversation_id: ConversationId) ->
     cog.views.pop(conversation_id, None)
 
 
-async def cleanup_conversation(cog, user_or_id: Member | User | int, conversation_id: int | None = None) -> None:
+async def cleanup_conversation(
+    cog, user_or_id: Member | User | int, conversation_id: int | None = None
+) -> None:
     user_id = user_or_id if isinstance(user_or_id, int) else user_or_id.id
     if conversation_id is not None:
         cog.conversation_histories.pop(conversation_id, None)
@@ -97,7 +99,9 @@ async def prune_runtime_state(cog) -> None:
     overflow = len(active_conversations) - MAX_ACTIVE_CONVERSATIONS
     if overflow > 0:
         active_conversations.sort(key=lambda item: item[1].updated_at)
-        stale_conversation_ids.extend(conversation_id for conversation_id, _ in active_conversations[:overflow])
+        stale_conversation_ids.extend(
+            conversation_id for conversation_id, _ in active_conversations[:overflow]
+        )
 
     for conversation_id in dict.fromkeys(stale_conversation_ids):
         cog.conversation_histories.pop(conversation_id, None)
@@ -117,7 +121,9 @@ async def prune_runtime_state(cog) -> None:
 
     overflow_view_states = len(cog.views) - MAX_VIEW_STATES
     if overflow_view_states > 0:
-        sorted_view_ids = sorted(cog.views, key=lambda conversation_id: cog.views[conversation_id][2])
+        sorted_view_ids = sorted(
+            cog.views, key=lambda conversation_id: cog.views[conversation_id][2]
+        )
         for conversation_id in sorted_view_ids[:overflow_view_states]:
             await _drop_conversation_view_state(cog, conversation_id)
 
@@ -163,7 +169,9 @@ def create_button_view(
     )
 
 
-def handle_tools_changed(selected_values: list[str], conversation: Conversation) -> tuple[set[str], str | None]:
+def handle_tools_changed(
+    selected_values: list[str], conversation: Conversation
+) -> tuple[set[str], str | None]:
     registry = get_tool_registry()
     active_names = {value for value in selected_values if value in registry}
     conversation.settings.web_search = "web_search" in active_names

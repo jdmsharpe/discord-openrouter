@@ -160,9 +160,7 @@ def parse_model_info(raw_model: dict[str, Any]) -> ModelInfo:
 
 def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
     usage = response_payload.get("usage") or {}
-    completion_tokens = _safe_int(
-        usage.get("completion_tokens") or usage.get("output_tokens")
-    )
+    completion_tokens = _safe_int(usage.get("completion_tokens") or usage.get("output_tokens"))
     prompt_tokens = _safe_int(usage.get("prompt_tokens") or usage.get("input_tokens"))
     total_tokens = _safe_int(usage.get("total_tokens"))
     cost_details = usage.get("cost_details") or {}
@@ -177,9 +175,7 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
     input_audio_tokens = _safe_int(prompt_details.get("audio_tokens"))
     input_video_tokens = _safe_int(prompt_details.get("video_tokens"))
     completion_details = (
-        usage.get("completion_tokens_details")
-        or usage.get("output_tokens_details")
-        or {}
+        usage.get("completion_tokens_details") or usage.get("output_tokens_details") or {}
     )
     output_audio_tokens = _safe_int(completion_details.get("audio_tokens"))
     output_image_tokens = _safe_int(completion_details.get("image_tokens"))
@@ -333,7 +329,9 @@ def extract_url_citations(message: dict[str, Any]) -> list[dict[str, str]]:
         citations.append(
             {
                 "url": normalized_url,
-                "title": title.strip() if isinstance(title, str) and title.strip() else normalized_url,
+                "title": title.strip()
+                if isinstance(title, str) and title.strip()
+                else normalized_url,
                 "content": content.strip() if isinstance(content, str) else "",
             }
         )
@@ -405,9 +403,7 @@ def build_prompt_cache_control(ttl: str | None) -> dict[str, Any] | None:
         return None
     if normalized not in SUPPORTED_PROMPT_CACHE_TTLS:
         supported = ", ".join(f"`{value}`" for value in SUPPORTED_PROMPT_CACHE_TTLS)
-        raise ValueError(
-            f"Unsupported prompt cache TTL `{ttl}`. Supported values: {supported}."
-        )
+        raise ValueError(f"Unsupported prompt cache TTL `{ttl}`. Supported values: {supported}.")
 
     payload: dict[str, Any] = {"type": "ephemeral"}
     if normalized != "5m":

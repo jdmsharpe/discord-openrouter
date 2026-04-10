@@ -1,5 +1,6 @@
 import importlib
 import sys
+from contextlib import suppress
 
 import pytest
 
@@ -9,10 +10,8 @@ MODULE_NAME = "discord_openrouter.config.auth"
 def _import_fresh_auth_module(monkeypatch=None):
     sys.modules.pop(MODULE_NAME, None)
     if monkeypatch is not None:
-        try:
+        with suppress(ModuleNotFoundError):
             monkeypatch.setattr("dotenv.load_dotenv", lambda *_, **__: None)
-        except ModuleNotFoundError:
-            pass
     return importlib.import_module(MODULE_NAME)
 
 

@@ -1,12 +1,18 @@
 import os
+from typing import Any
 
 from ..util import normalize_pdf_engine
 
 try:
-    from dotenv import load_dotenv
+    from dotenv import load_dotenv as _load_dotenv
 except ModuleNotFoundError:  # pragma: no cover - fallback for minimal test environments
-    def load_dotenv(*_args, **_kwargs):
+
+    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
         return False
+
+else:
+    load_dotenv = _load_dotenv
+
 
 load_dotenv()
 
@@ -61,7 +67,9 @@ def _parse_int_env(name: str, default: int) -> int:
     try:
         return int(stripped_value)
     except ValueError as exc:
-        raise RuntimeError(f"Invalid {name} value. Expected an integer, got {raw_value!r}.") from exc
+        raise RuntimeError(
+            f"Invalid {name} value. Expected an integer, got {raw_value!r}."
+        ) from exc
 
 
 def _parse_pdf_engine_env(name: str) -> str | None:

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 import httpx
 
@@ -117,7 +118,9 @@ def build_user_content(prompt: str | None, attachment_parts: Sequence[dict[str, 
     return parts
 
 
-def summarize_attachment_parts(attachment_parts: Sequence[dict[str, Any]]) -> AttachmentRequirements:
+def summarize_attachment_parts(
+    attachment_parts: Sequence[dict[str, Any]],
+) -> AttachmentRequirements:
     required_input_modalities: set[str] = set()
     has_pdf = False
 

@@ -48,7 +48,9 @@ async def run_video_command(
 
     if attachment is not None and not _is_image_attachment(attachment):
         await ctx.followup.send(
-            embed=error_embed("Only image attachments can be used as `/openrouter video` references."),
+            embed=error_embed(
+                "Only image attachments can be used as `/openrouter video` references."
+            ),
         )
         return
 
@@ -74,7 +76,9 @@ async def run_video_command(
             await ctx.followup.send(embed=error_embed(str(error)))
             return
         except Exception as error:
-            cog.logger.error("Failed to normalize video reference attachment: %s", error, exc_info=True)
+            cog.logger.error(
+                "Failed to normalize video reference attachment: %s", error, exc_info=True
+            )
             await ctx.followup.send(
                 embed=error_embed("Failed to process the provided image attachment."),
             )
@@ -127,11 +131,15 @@ async def run_video_command(
     ]
     if not unsigned_urls:
         await ctx.followup.send(
-            embed=error_embed("The video job completed, but no downloadable video URLs were returned."),
+            embed=error_embed(
+                "The video job completed, but no downloadable video URLs were returned."
+            ),
         )
         return
 
-    job_id = _coerce_str(status_response.get("id")) or _coerce_str(submit_response.get("id")) or "video"
+    job_id = (
+        _coerce_str(status_response.get("id")) or _coerce_str(submit_response.get("id")) or "video"
+    )
     video_assets = await _download_video_assets(cog, unsigned_urls, job_id=job_id)
     request_cost = _safe_float_or_none((status_response.get("usage") or {}).get("cost"))
     daily_cost = track_daily_cost(cog, ctx.author.id, request_cost)
@@ -176,8 +184,7 @@ async def run_video_command(
         )
 
     files = [
-        File(io.BytesIO(video_bytes), filename=filename)
-        for filename, video_bytes in video_assets
+        File(io.BytesIO(video_bytes), filename=filename) for filename, video_bytes in video_assets
     ]
     try:
         if files:
@@ -236,7 +243,9 @@ async def _download_video_assets(
         try:
             video_bytes, content_type = await cog.openrouter_client.download_file_bytes(url)
         except Exception as error:
-            cog.logger.warning("Failed to download generated video %s: %s", index, error, exc_info=True)
+            cog.logger.warning(
+                "Failed to download generated video %s: %s", index, error, exc_info=True
+            )
             continue
         filename = f"{job_id}_{index}.{_guess_video_extension(url, content_type)}"
         assets.append((filename, video_bytes))

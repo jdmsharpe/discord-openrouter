@@ -1,7 +1,13 @@
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .bot import build_bot, main
+    from .cogs.openrouter.cog import OpenRouterCog
+
 __all__ = ["OpenRouterCog", "build_bot", "main"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name in {"build_bot", "main"}:
         from .bot import build_bot, main
 

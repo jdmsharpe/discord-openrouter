@@ -8,8 +8,8 @@ from discord.ext import commands, tasks
 
 from ...config import (
     GUILD_IDS,
-    OPENROUTER_DEFAULT_PDF_ENGINE,
     OPENROUTER_DEFAULT_IMAGE_MODEL,
+    OPENROUTER_DEFAULT_PDF_ENGINE,
     OPENROUTER_DEFAULT_STT_MODEL,
     OPENROUTER_DEFAULT_TEXT_MODEL,
     OPENROUTER_DEFAULT_TTS_MODEL,
@@ -19,10 +19,12 @@ from ...util import describe_chat_settings, prompt_cache_supported_for_model
 from .chat import (
     handle_check_permissions,
     handle_on_message,
-    keep_typing as keep_typing_loop,
     run_chat_command,
 )
 from .chat import handle_new_message_in_conversation as handle_conversation_message
+from .chat import (
+    keep_typing as keep_typing_loop,
+)
 from .chat import regenerate_conversation_response as regenerate_response
 from .client import OpenRouterApiError, build_openrouter_client
 from .command_options import (
@@ -46,7 +48,6 @@ from .embeds import (
 )
 from .image import run_image_command
 from .speech import run_stt_command, run_tts_command
-from .video import run_video_command
 from .state import (
     cleanup_conversation,
     create_button_view,
@@ -55,6 +56,7 @@ from .state import (
     stop_conversation,
     strip_previous_view,
 )
+from .video import run_video_command
 
 
 class OpenRouterCog(commands.Cog):
@@ -289,7 +291,9 @@ class OpenRouterCog(commands.Cog):
         choices=MODEL_OUTPUT_MODALITY_CHOICES,
     )
     @option("limit", description="Max models to return. (default: 10)", required=False, type=int)
-    @option("refresh", description="Refresh cached models. (default: false)", required=False, type=bool)
+    @option(
+        "refresh", description="Refresh cached models. (default: false)", required=False, type=bool
+    )
     async def models(
         self,
         ctx: ApplicationContext,
@@ -405,7 +409,9 @@ class OpenRouterCog(commands.Cog):
             lines.append("**Channel default:** updated")
 
         if model_info is None:
-            lines.append("Model was not found in the cached catalog, so it was saved exactly as typed.")
+            lines.append(
+                "Model was not found in the cached catalog, so it was saved exactly as typed."
+            )
 
         await ctx.followup.send(
             embed=build_model_status_embed(
