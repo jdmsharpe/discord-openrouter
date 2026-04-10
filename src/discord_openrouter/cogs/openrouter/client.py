@@ -144,6 +144,89 @@ class OpenRouterClient:
             payload["session_id"] = session_id[:128]
         return await self._stream_audio_completion(payload)
 
+    async def create_video_generation(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        duration: int | None = None,
+        resolution: str | None = None,
+        aspect_ratio: str | None = None,
+        size: str | None = None,
+        input_references: list[dict[str, Any]] | None = None,
+        generate_audio: bool | None = None,
+        seed: int | None = None,
+        provider: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+        }
+        if duration is not None:
+            payload["duration"] = duration
+        if resolution:
+            payload["resolution"] = resolution
+        if aspect_ratio:
+            payload["aspect_ratio"] = aspect_ratio
+        if size:
+            payload["size"] = size
+        if input_references:
+            payload["input_references"] = [dict(reference) for reference in input_references]
+        if generate_audio is not None:
+            payload["generate_audio"] = generate_audio
+        if seed is not None:
+            payload["seed"] = seed
+        if provider:
+            payload["provider"] = dict(provider)
+
+        import httpx
+
+        timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.post(
+                f"{OPENROUTER_BASE_URL}/videos",
+                headers=self._request_headers(),
+                json=payload,
+            )
+
+        if response.status_code >= 400:
+            raise OpenRouterApiError(_extract_error_message(response))
+        return response.json()
+
+    async def get_video_generation(
+        self,
+        *,
+        job_id: str | None = None,
+        polling_url: str | None = None,
+    ) -> dict[str, Any]:
+        if not polling_url and not job_id:
+            raise OpenRouterApiError("A video polling URL or job ID is required.")
+
+        import httpx
+
+        timeout = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(
+                polling_url or f"{OPENROUTER_BASE_URL}/videos/{job_id}",
+                headers=self._request_headers(),
+            )
+
+        if response.status_code >= 400:
+            raise OpenRouterApiError(_extract_error_message(response))
+        return response.json()
+
+    async def download_file_bytes(self, url: str) -> tuple[bytes, str | None]:
+        import httpx
+
+        headers = self._request_headers() if "openrouter.ai/" in url else None
+        timeout = httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
+
+        if response.status_code >= 400:
+            raise OpenRouterApiError(_extract_error_message(response))
+        return response.content, response.headers.get("Content-Type")
+
     async def list_models(
         self,
         *,

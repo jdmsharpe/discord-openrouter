@@ -39,6 +39,25 @@ IMAGE_SIZE_CHOICES = [
     OptionChoice(name="4K", value="4K"),
 ]
 
+VIDEO_ASPECT_RATIO_CHOICES = [
+    OptionChoice(name="16:9 (Landscape)", value="16:9"),
+    OptionChoice(name="9:16 (Portrait)", value="9:16"),
+    OptionChoice(name="1:1 (Square)", value="1:1"),
+    OptionChoice(name="4:3", value="4:3"),
+    OptionChoice(name="3:4", value="3:4"),
+    OptionChoice(name="21:9", value="21:9"),
+    OptionChoice(name="9:21", value="9:21"),
+]
+
+VIDEO_RESOLUTION_CHOICES = [
+    OptionChoice(name="480p", value="480p"),
+    OptionChoice(name="720p", value="720p"),
+    OptionChoice(name="1080p", value="1080p"),
+    OptionChoice(name="1K", value="1K"),
+    OptionChoice(name="2K", value="2K"),
+    OptionChoice(name="4K", value="4K"),
+]
+
 MODEL_INPUT_MODALITY_CHOICES = [
     OptionChoice(name="Text Input", value="text"),
     OptionChoice(name="Image Input", value="image"),
@@ -51,6 +70,7 @@ MODEL_OUTPUT_MODALITY_CHOICES = [
     OptionChoice(name="Text Output", value="text"),
     OptionChoice(name="Image Output", value="image"),
     OptionChoice(name="Audio Output", value="audio"),
+    OptionChoice(name="Video Output", value="video"),
     OptionChoice(name="Embeddings Output", value="embeddings"),
 ]
 

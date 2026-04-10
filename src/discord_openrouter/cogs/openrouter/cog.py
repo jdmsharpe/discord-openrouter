@@ -13,6 +13,7 @@ from ...config import (
     OPENROUTER_DEFAULT_STT_MODEL,
     OPENROUTER_DEFAULT_TEXT_MODEL,
     OPENROUTER_DEFAULT_TTS_MODEL,
+    OPENROUTER_DEFAULT_VIDEO_MODEL,
 )
 from ...util import describe_chat_settings, prompt_cache_supported_for_model
 from .chat import (
@@ -34,6 +35,8 @@ from .command_options import (
     PROMPT_CACHE_TTL_CHOICES,
     REASONING_EFFORT_CHOICES,
     TTS_FORMAT_CHOICES,
+    VIDEO_ASPECT_RATIO_CHOICES,
+    VIDEO_RESOLUTION_CHOICES,
 )
 from .embeds import (
     build_current_model_embed,
@@ -43,6 +46,7 @@ from .embeds import (
 )
 from .image import run_image_command
 from .speech import run_stt_command, run_tts_command
+from .video import run_video_command
 from .state import (
     cleanup_conversation,
     create_button_view,
@@ -460,6 +464,89 @@ class OpenRouterCog(commands.Cog):
             aspect_ratio=aspect_ratio,
             image_size=image_size,
             attachment=attachment,
+        )
+
+    @openrouter.command(
+        name="video",
+        description="Generates a video from a prompt.",
+    )
+    @option("prompt", description="Prompt", required=True, type=str)
+    @option(
+        "model",
+        description=f"OpenRouter video model slug to use. (default: {OPENROUTER_DEFAULT_VIDEO_MODEL})",
+        required=False,
+        type=str,
+    )
+    @option(
+        "aspect_ratio",
+        description="Requested video aspect ratio. Support varies by model.",
+        required=False,
+        type=str,
+        choices=VIDEO_ASPECT_RATIO_CHOICES,
+    )
+    @option(
+        "resolution",
+        description="Requested output resolution. Support varies by model.",
+        required=False,
+        type=str,
+        choices=VIDEO_RESOLUTION_CHOICES,
+    )
+    @option(
+        "size",
+        description="Exact output size such as 1280x720. Use instead of resolution/aspect_ratio when needed.",
+        required=False,
+        type=str,
+    )
+    @option(
+        "attachment",
+        description="Optional reference image to guide the video generation.",
+        required=False,
+        type=Attachment,
+    )
+    @option(
+        "duration",
+        description="Requested video duration in seconds. Support varies by model.",
+        required=False,
+        type=int,
+        min_value=1,
+    )
+    @option(
+        "generate_audio",
+        description="Request generated audio when supported by the model.",
+        required=False,
+        type=bool,
+    )
+    @option(
+        "seed",
+        description="Optional seed for repeatable results when supported.",
+        required=False,
+        type=int,
+    )
+    async def video(
+        self,
+        ctx: ApplicationContext,
+        prompt: str,
+        model: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        size: str | None = None,
+        attachment: Attachment | None = None,
+        duration: int | None = None,
+        generate_audio: bool | None = None,
+        seed: int | None = None,
+    ):
+        await run_video_command(
+            self,
+            ctx=ctx,
+            prompt=prompt,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            size=size,
+            attachment=attachment,
+            duration=duration,
+            generate_audio=generate_audio,
+            seed=seed,
         )
 
     @openrouter.command(

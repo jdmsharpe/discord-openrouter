@@ -315,3 +315,143 @@ def test_collect_audio_stream_assembles_audio_usage_and_transcript():
     assert result["text"] == "world"
     assert result["model"] == "openai/gpt-audio-mini"
     assert result["usage"]["cost"] == 0.0012
+
+
+def test_create_video_generation_uses_videos_endpoint(monkeypatch):
+    class _FakeHttpResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+            self.headers = {}
+
+        def json(self):
+            return self._payload
+
+    class _FakeAsyncClient:
+        calls = []
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, *, headers=None, json=None):
+            self.calls.append({"method": "POST", "url": url, "headers": headers, "json": json})
+            return _FakeHttpResponse(
+                202,
+                {
+                    "id": "job-123",
+                    "polling_url": "https://openrouter.ai/api/v1/videos/job-123",
+                    "status": "pending",
+                },
+            )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "httpx",
+        SimpleNamespace(AsyncClient=_FakeAsyncClient, Timeout=lambda **_kwargs: None),
+    )
+
+    client = OpenRouterClient(
+        api_key="test-key",
+        site_url="https://example.com",
+        app_name="discord-openrouter",
+    )
+    payload = asyncio.run(
+        client.create_video_generation(
+            model="google/veo-3.1",
+            prompt="A lighthouse in a storm.",
+            duration=6,
+            resolution="720p",
+            aspect_ratio="16:9",
+            input_references=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://cdn.example/reference.png"},
+                }
+            ],
+            generate_audio=False,
+            seed=7,
+        )
+    )
+
+    assert payload["id"] == "job-123"
+    assert _FakeAsyncClient.calls[0]["url"].endswith("/videos")
+    assert _FakeAsyncClient.calls[0]["json"] == {
+        "model": "google/veo-3.1",
+        "prompt": "A lighthouse in a storm.",
+        "duration": 6,
+        "resolution": "720p",
+        "aspect_ratio": "16:9",
+        "input_references": [
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://cdn.example/reference.png"},
+            }
+        ],
+        "generate_audio": False,
+        "seed": 7,
+    }
+
+
+def test_get_video_generation_and_download_file_bytes(monkeypatch):
+    class _FakeHttpResponse:
+        def __init__(self, status_code, payload=None, content=b"", headers=None):
+            self.status_code = status_code
+            self._payload = payload
+            self.content = content
+            self.headers = headers or {}
+
+        def json(self):
+            return self._payload
+
+    class _FakeAsyncClient:
+        calls = []
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, *, headers=None):
+            self.calls.append({"method": "GET", "url": url, "headers": headers})
+            if url.endswith("/videos/job-123"):
+                return _FakeHttpResponse(
+                    200,
+                    {
+                        "id": "job-123",
+                        "status": "completed",
+                        "unsigned_urls": ["https://openrouter.ai/api/v1/videos/job-123/content?index=0"],
+                    },
+                )
+            return _FakeHttpResponse(
+                200,
+                content=b"video-bytes",
+                headers={"Content-Type": "video/mp4"},
+            )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "httpx",
+        SimpleNamespace(AsyncClient=_FakeAsyncClient, Timeout=lambda **_kwargs: None),
+    )
+
+    client = OpenRouterClient(api_key="test-key")
+    status_payload = asyncio.run(client.get_video_generation(job_id="job-123"))
+    file_bytes, content_type = asyncio.run(
+        client.download_file_bytes("https://openrouter.ai/api/v1/videos/job-123/content?index=0")
+    )
+
+    assert status_payload["status"] == "completed"
+    assert file_bytes == b"video-bytes"
+    assert content_type == "video/mp4"
+    assert _FakeAsyncClient.calls[0]["url"].endswith("/videos/job-123")
+    assert _FakeAsyncClient.calls[1]["url"].endswith("/videos/job-123/content?index=0")
