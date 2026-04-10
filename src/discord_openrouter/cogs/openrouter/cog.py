@@ -161,7 +161,7 @@ class OpenRouterCog(commands.Cog):
     @option(
         "pdf_engine",
         description=(
-            "Preferred PDF parsing engine for PDF attachments. "
+            "PDF parser for PDF attachments. "
             f"(default: {OPENROUTER_DEFAULT_PDF_ENGINE or 'OpenRouter-managed'})"
         ),
         required=False,
@@ -170,51 +170,51 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "temperature",
-        description="Sampling temperature.",
+        description="Sampling temperature. (default: not set)",
         required=False,
         type=float,
     )
     @option(
         "top_p",
-        description="Nucleus sampling value.",
+        description="Nucleus sampling value. (default: not set)",
         required=False,
         type=float,
     )
     @option(
         "max_tokens",
-        description="Maximum completion tokens.",
+        description="Maximum completion tokens. (default: not set)",
         required=False,
         type=int,
     )
     @option(
         "context_compression",
-        description="Override OpenRouter context compression. Set false to disable it.",
+        description="Override context compression. (default: not set / OpenRouter default)",
         required=False,
         type=bool,
     )
     @option(
         "prompt_cache_ttl",
-        description="Explicit Anthropic prompt caching TTL for this conversation.",
+        description="Anthropic prompt caching TTL. (default: not set)",
         required=False,
         type=str,
         choices=PROMPT_CACHE_TTL_CHOICES,
     )
     @option(
         "reasoning_effort",
-        description="Reasoning effort for supported models.",
+        description="Reasoning effort for supported models. (default: not set)",
         required=False,
         type=str,
         choices=REASONING_EFFORT_CHOICES,
     )
     @option(
         "reasoning_max_tokens",
-        description="Optional reasoning token budget for supported models.",
+        description="Reasoning token budget for supported models. (default: not set)",
         required=False,
         type=int,
     )
     @option(
         "exclude_reasoning",
-        description="Let the model think internally but omit reasoning blocks from the response when supported.",
+        description="Hide reasoning blocks while still using reasoning when supported. (default: false)",
         required=False,
         type=bool,
     )
@@ -273,23 +273,23 @@ class OpenRouterCog(commands.Cog):
         name="models",
         description="Search the models available through OpenRouter.",
     )
-    @option("query", description="Optional search text.", required=False, type=str)
+    @option("query", description="Search text. (default: not set)", required=False, type=str)
     @option(
         "input_modality",
-        description="Filter models by a supported input modality.",
+        description="Filter by input modality. (default: not set)",
         required=False,
         type=str,
         choices=MODEL_INPUT_MODALITY_CHOICES,
     )
     @option(
         "output_modality",
-        description="Filter models by a supported output modality.",
+        description="Filter by output modality. (default: not set)",
         required=False,
         type=str,
         choices=MODEL_OUTPUT_MODALITY_CHOICES,
     )
-    @option("limit", description="Maximum number of models to return.", required=False, type=int)
-    @option("refresh", description="Refresh the cached model catalog.", required=False, type=bool)
+    @option("limit", description="Max models to return. (default: 10)", required=False, type=int)
+    @option("refresh", description="Refresh cached models. (default: false)", required=False, type=bool)
     async def models(
         self,
         ctx: ApplicationContext,
@@ -349,7 +349,7 @@ class OpenRouterCog(commands.Cog):
     @option("model", description="Model slug or search text.", required=True, type=str)
     @option(
         "scope",
-        description="Apply the model to the current conversation, the channel default, or both.",
+        description="Where to apply the model change. (default: conversation)",
         required=False,
         type=str,
         choices=MODEL_SCOPE_CHOICES,
@@ -429,21 +429,21 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "aspect_ratio",
-        description="Requested image aspect ratio. Support varies by model.",
+        description="Image aspect ratio. (default: not set)",
         required=False,
         type=str,
         choices=IMAGE_ASPECT_RATIO_CHOICES,
     )
     @option(
         "image_size",
-        description="Requested image size. Support varies by model.",
+        description="Image size hint. (default: not set)",
         required=False,
         type=str,
         choices=IMAGE_SIZE_CHOICES,
     )
     @option(
         "attachment",
-        description="Image to edit or remix. Omit to generate a new image.",
+        description="Image to edit or remix. (default: not set)",
         required=False,
         type=Attachment,
     )
@@ -479,46 +479,46 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "aspect_ratio",
-        description="Requested video aspect ratio. Support varies by model.",
+        description="Video aspect ratio. (default: not set)",
         required=False,
         type=str,
         choices=VIDEO_ASPECT_RATIO_CHOICES,
     )
     @option(
         "resolution",
-        description="Requested output resolution. Support varies by model.",
+        description="Output resolution. (default: not set)",
         required=False,
         type=str,
         choices=VIDEO_RESOLUTION_CHOICES,
     )
     @option(
         "size",
-        description="Exact output size such as 1280x720. Use instead of resolution/aspect_ratio when needed.",
+        description="Exact size like 1280x720. (default: not set)",
         required=False,
         type=str,
     )
     @option(
         "attachment",
-        description="Optional reference image to guide the video generation.",
+        description="Reference image. (default: not set)",
         required=False,
         type=Attachment,
     )
     @option(
         "duration",
-        description="Requested video duration in seconds. Support varies by model.",
+        description="Video duration in seconds. (default: not set)",
         required=False,
         type=int,
         min_value=1,
     )
     @option(
         "generate_audio",
-        description="Request generated audio when supported by the model.",
+        description="Request audio output when supported. (default: not set / model default)",
         required=False,
         type=bool,
     )
     @option(
         "seed",
-        description="Optional seed for repeatable results when supported.",
+        description="Seed for repeatable results. (default: not set)",
         required=False,
         type=int,
     )
@@ -567,7 +567,7 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "voice",
-        description="Optional voice override. Supported voices vary by model.",
+        description="Voice override. (default: model/provider default)",
         required=False,
         type=str,
     )
