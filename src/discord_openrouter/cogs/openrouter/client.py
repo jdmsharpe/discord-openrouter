@@ -246,6 +246,7 @@ class OpenRouterClient:
                 response = await client.get(
                     f"{OPENROUTER_BASE_URL}/models",
                     headers=self._request_headers(),
+                    params={"output_modalities": "all"},
                 )
 
         if response.status_code >= 400:

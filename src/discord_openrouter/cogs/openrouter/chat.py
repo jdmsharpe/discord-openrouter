@@ -407,6 +407,7 @@ async def _run_conversation_turn(
                 usage=usage,
                 request_cost=request_cost,
                 daily_cost=daily_cost,
+                model_info=model_info,
             )
 
         conversation.append_assistant_message(assistant_message)

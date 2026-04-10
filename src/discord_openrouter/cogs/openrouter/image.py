@@ -50,12 +50,12 @@ async def run_image_command(
         await ctx.followup.send(embed=error_embed(str(error)))
         return
 
-    if model_info is not None and "image" not in model_info.output_modalities:
-        await ctx.followup.send(
-            embed=error_embed(
-                f"`{model_info.id}` does not advertise image output in the OpenRouter catalog."
-            )
-        )
+    modality_error = _validate_image_model_modalities(
+        model_info,
+        requires_image_input=attachment is not None,
+    )
+    if modality_error:
+        await ctx.followup.send(embed=error_embed(modality_error))
         return
 
     try:
@@ -168,6 +168,16 @@ def _resolve_image_modalities(model_info) -> list[str]:
     if model_info is not None and "text" not in model_info.output_modalities:
         return ["image"]
     return ["image", "text"]
+
+
+def _validate_image_model_modalities(model_info, *, requires_image_input: bool) -> str | None:
+    if model_info is None:
+        return None
+    if "image" not in model_info.output_modalities:
+        return f"`{model_info.id}` does not advertise image output in the OpenRouter catalog."
+    if requires_image_input and "image" not in model_info.input_modalities:
+        return f"`{model_info.id}` does not advertise image input in the OpenRouter catalog."
+    return None
 
 
 def _build_image_config(*, aspect_ratio: str | None, image_size: str | None) -> dict[str, str]:
