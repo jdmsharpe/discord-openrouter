@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from concurrent.futures import Future as ConcurrentFuture
 from typing import Any
 
 from discord import ButtonStyle, Interaction, SelectOption
@@ -19,6 +21,25 @@ async def _send_interaction_error(interaction: Interaction, context: str, error:
         await interaction.response.send_message(message, ephemeral=True)
 
 
+async def _build_view_on_running_loop(view: View, *, timeout: float | None) -> None:
+    View.__init__(view, timeout=timeout)
+
+
+def _initialize_view(view: View, *, timeout: float | None) -> None:
+    """Build a discord View even when tests construct it outside a running loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_build_view_on_running_loop(view, timeout=timeout))
+        finally:
+            loop.close()
+        view._stopped = ConcurrentFuture()
+    else:
+        View.__init__(view, timeout=timeout)
+
+
 class ButtonView(View):
     def __init__(
         self,
@@ -31,7 +52,7 @@ class ButtonView(View):
         on_stop: Callable[[int, Any], Awaitable[None]],
         on_tools_changed: Callable[[list[str], Any], tuple[set[str], str | None]],
     ):
-        super().__init__(timeout=None)
+        _initialize_view(self, timeout=None)
         self.conversation_starter_id = conversation_starter_id
         self.conversation_id = conversation_id
         self._get_conversation = get_conversation
@@ -39,6 +60,12 @@ class ButtonView(View):
         self._on_stop = on_stop
         self._on_tools_changed = on_tools_changed
         self._add_tool_select(initial_tools or [])
+
+    async def wait(self) -> bool:
+        """Support wait() even when the view was constructed outside a running loop."""
+        if isinstance(self._stopped, ConcurrentFuture):
+            return await asyncio.wrap_future(self._stopped)
+        return await super().wait()
 
     def _add_tool_select(self, initial_tools: list[dict[str, Any]]) -> None:
         selected_tool_names = {
