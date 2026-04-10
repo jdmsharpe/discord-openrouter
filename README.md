@@ -8,7 +8,7 @@
 
 ## Overview
 
-A Discord bot built on Pycord 2.0 that integrates OpenRouter through the official OpenRouter Python SDK. It provides stateful, multi-turn chat in Discord, supports multimodal inputs plus image and audio generation, preserves reasoning blocks for supported models, and lets you switch models on the fly without losing the conversation.
+A Discord bot built on Pycord 2.0 that integrates OpenRouter through the official OpenRouter Python SDK. It provides stateful, multi-turn chat in Discord, supports multimodal inputs plus image, video, and audio generation, preserves reasoning blocks for supported models, and lets you switch models on the fly without losing the conversation.
 
 ## Features
 
@@ -17,6 +17,7 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter through the officia
 - **Model Discovery:** Query available models from your OpenRouter account with `/openrouter models`.
 - **Multimodal Input:** `/openrouter chat` supports Discord image, PDF, audio, video, and general file inputs using OpenRouter's normalized multimodal API.
 - **Image Generation:** `/openrouter image` generates or remixes images with models that advertise image output.
+- **Video Generation:** `/openrouter video` generates videos through OpenRouter's asynchronous video API, with optional reference images.
 - **Text-to-Speech:** `/openrouter tts` generates spoken audio with models that advertise audio output.
 - **Speech-to-Text:** `/openrouter stt` transcribes uploaded audio with models that advertise audio input and text output.
 - **Web Search:** `/openrouter chat` can enable OpenRouter's `openrouter:web_search` server tool for current-information questions, with source links surfaced in Discord.
@@ -62,6 +63,16 @@ Generate a new image or remix an uploaded one.
 - **Editing Mode:** attach an existing Discord image to remix or edit it with the selected model.
 - **Model Requirement:** the selected model should advertise `image` in its OpenRouter `output_modalities`.
 
+### `/openrouter video`
+Generate a video from a text prompt, with an optional reference image.
+
+- **Core Inputs:** `prompt`, optional `model`, optional `attachment`.
+- **Video Controls:** optional `aspect_ratio`, `resolution`, `size`, `duration`, `generate_audio`, and `seed`.
+- **Reference Image Mode:** attach an existing Discord image to guide the video generation. This uses OpenRouter's `input_references` support on the `/videos` API.
+- **Sizing Notes:** `size` is an exact dimension such as `1280x720`. Use it instead of `resolution` and `aspect_ratio`, not alongside them.
+- **Async Workflow:** video generation is polled server-side until OpenRouter reports `completed`, then the bot downloads and re-uploads the generated video when possible.
+- **Model Requirement:** the selected model should advertise `video` in its OpenRouter `output_modalities`. If you use a reference image, the model should also advertise `image` input.
+
 ### `/openrouter tts`
 Convert text into speech audio.
 
@@ -106,7 +117,7 @@ Check whether the bot can read the current channel and message history.
 - **Prompt caching visibility:** when OpenRouter reports cache activity, the usage embed includes cache reads (`cached_tokens`) and cache writes (`cache_write_tokens`).
 - **Web search visibility:** when OpenRouter reports server-tool web usage, the usage embed includes the search count and the response can include a Sources embed from standardized `url_citation` annotations.
 - **Reasoning visibility:** reasoning-capable models may return spoilered thinking embeds. Set `exclude_reasoning` on `/openrouter chat` if you want reasoning used internally but omitted from the Discord response when supported.
-- **Video support:** `/openrouter chat` can forward video attachments through OpenRouter's chat completions API, but the project does not currently expose a dedicated video analysis command or OpenRouter's asynchronous video generation API.
+- **Video support:** `/openrouter chat` can analyze uploaded video attachments through OpenRouter's chat completions API, and `/openrouter video` uses OpenRouter's asynchronous `/videos` API for video generation.
 - **Generated images:** `/openrouter image` downloads returned image payloads and re-uploads them as Discord files. In regular chat, generated image outputs are also re-attached as Discord files when the model returns image payloads.
 
 ## Setup & Installation
@@ -156,6 +167,7 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback model when neither a conversation nor channel default is set (default: `minimax/minimax-m2.7`) |
 | `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter image` (default: `google/gemini-3.1-flash-image-preview`) |
+| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter video` (default: `google/veo-3.1`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter tts` (default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter stt` (default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default PDF parsing engine for `/openrouter chat` PDF attachments. Supported values: `cloudflare-ai`, `mistral-ocr`, `native`. Deprecated `pdf-text` is normalized to `cloudflare-ai`. |
@@ -209,17 +221,20 @@ bot.add_cog(OpenRouterCog(bot=bot))
 5. Use the `Tools` dropdown under a response to turn `web_search` and `datetime` on or off for the rest of that conversation.
 6. Use `/openrouter models query:minimax` when you want help finding the exact model slug.
 7. Use `/openrouter image prompt:...` to generate or remix images with OpenRouter image-capable models.
-8. Use `/openrouter tts input:...` to generate spoken audio with OpenRouter audio-capable models.
-9. Use `/openrouter stt attachment:...` to transcribe uploaded audio with OpenRouter audio-input models.
-10. Use `/openrouter chat web_search:true prompt:...` when you want current information with linked sources.
-11. Use `/openrouter chat datetime:true prompt:...` when the model should be able to check "right now" context.
-12. Use `/openrouter chat context_compression:true prompt:...` for long-running threads that may hit smaller context windows.
+8. Use `/openrouter video prompt:...` to generate videos with OpenRouter video-capable models.
+9. Use `/openrouter tts input:...` to generate spoken audio with OpenRouter audio-capable models.
+10. Use `/openrouter stt attachment:...` to transcribe uploaded audio with OpenRouter audio-input models.
+11. Use `/openrouter chat web_search:true prompt:...` when you want current information with linked sources.
+12. Use `/openrouter chat datetime:true prompt:...` when the model should be able to check "right now" context.
+13. Use `/openrouter chat context_compression:true prompt:...` for long-running threads that may hit smaller context windows.
 
 ### Multimodal Examples
 
 - Summarize a PDF with OCR enabled: `/openrouter chat prompt:Summarize this contract attachment:<pdf> pdf_engine:mistral-ocr`
 - Ask about an uploaded image: `/openrouter chat prompt:Describe the scene and read any visible text attachment:<image>`
 - Analyze a video clip with a video-capable model: `/openrouter chat model:<video-model> prompt:What happens in this clip? attachment:<video>`
+- Generate a short video from text: `/openrouter video prompt:A neon train racing through a rainy cyberpunk city at night`
+- Generate a guided video from an image: `/openrouter video prompt:Animate this character walking forward attachment:<image>`
 - Start a PDF conversation with the default parser from `.env`, then ask follow-up questions in the same channel without re-uploading the document.
 - Search the web for up-to-date info: `/openrouter chat web_search:true prompt:What changed in OpenRouter this week?`
 - Start a cached Claude conversation: `/openrouter chat model:anthropic/claude-sonnet-4.5 prompt_cache_ttl:1h prompt:Use this rubric for all later answers...`

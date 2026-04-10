@@ -55,12 +55,14 @@ def test_invalid_guild_ids_raise_clear_error(monkeypatch):
 def test_default_model_and_cache_ttl_are_applied(monkeypatch):
     monkeypatch.delenv("OPENROUTER_DEFAULT_TEXT_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_DEFAULT_VIDEO_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_TTS_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_STT_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_PDF_ENGINE", raising=False)
     monkeypatch.delenv("OPENROUTER_APP_CATEGORIES", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_VIDEO_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_TTS_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_MODEL_CACHE_TTL_SECONDS", raising=False)
 
@@ -68,12 +70,14 @@ def test_default_model_and_cache_ttl_are_applied(monkeypatch):
 
     assert auth.OPENROUTER_DEFAULT_TEXT_MODEL == auth.DEFAULT_TEXT_MODEL
     assert auth.OPENROUTER_DEFAULT_IMAGE_MODEL == auth.DEFAULT_IMAGE_MODEL
+    assert auth.OPENROUTER_DEFAULT_VIDEO_MODEL == auth.DEFAULT_VIDEO_MODEL
     assert auth.OPENROUTER_DEFAULT_TTS_MODEL == auth.DEFAULT_TTS_MODEL
     assert auth.OPENROUTER_DEFAULT_STT_MODEL == auth.DEFAULT_STT_MODEL
     assert auth.OPENROUTER_DEFAULT_PDF_ENGINE == auth.DEFAULT_PDF_ENGINE
     assert auth.OPENROUTER_APP_CATEGORIES is None
     assert auth.OPENROUTER_DEFAULT_MODEL == auth.DEFAULT_TEXT_MODEL
     assert auth.OPENROUTER_IMAGE_MODEL == auth.DEFAULT_IMAGE_MODEL
+    assert auth.OPENROUTER_VIDEO_MODEL == auth.DEFAULT_VIDEO_MODEL
     assert auth.OPENROUTER_TTS_MODEL == auth.DEFAULT_TTS_MODEL
     assert auth.OPENROUTER_MODEL_CACHE_TTL_SECONDS == auth.DEFAULT_MODEL_CACHE_TTL_SECONDS
 
@@ -81,15 +85,18 @@ def test_default_model_and_cache_ttl_are_applied(monkeypatch):
 def test_legacy_model_env_vars_fallback_to_new_names(monkeypatch):
     monkeypatch.setenv("OPENROUTER_DEFAULT_MODEL", "legacy/text-model")
     monkeypatch.setenv("OPENROUTER_IMAGE_MODEL", "legacy/image-model")
+    monkeypatch.setenv("OPENROUTER_VIDEO_MODEL", "legacy/video-model")
     monkeypatch.setenv("OPENROUTER_TTS_MODEL", "legacy/tts-model")
     monkeypatch.delenv("OPENROUTER_DEFAULT_TEXT_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_DEFAULT_VIDEO_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_TTS_MODEL", raising=False)
 
     auth = _import_fresh_auth_module(monkeypatch)
 
     assert auth.OPENROUTER_DEFAULT_TEXT_MODEL == "legacy/text-model"
     assert auth.OPENROUTER_DEFAULT_IMAGE_MODEL == "legacy/image-model"
+    assert auth.OPENROUTER_DEFAULT_VIDEO_MODEL == "legacy/video-model"
     assert auth.OPENROUTER_DEFAULT_TTS_MODEL == "legacy/tts-model"
 
 
