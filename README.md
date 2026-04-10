@@ -31,6 +31,7 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter through the officia
 ## Commands
 
 ### `/openrouter chat`
+
 Start a conversation with an OpenRouter model.
 
 - **Core Inputs:** `prompt`, optional `persona`, optional `model`, optional `attachment`, and optional `pdf_engine`.
@@ -48,6 +49,7 @@ Start a conversation with an OpenRouter model.
 - **Reasoning Notes:** use either `reasoning_effort` or `reasoning_max_tokens` for a request, not both. `exclude_reasoning` keeps model thinking internal when the provider supports hidden reasoning.
 
 ### `/openrouter switch_model`
+
 Switch the active conversation model, save a per-channel default, or do both.
 
 - `scope=conversation` updates only the running conversation. If none is active, it falls back to updating your saved channel default.
@@ -55,6 +57,7 @@ Switch the active conversation model, save a per-channel default, or do both.
 - `scope=both` updates both the running conversation and the saved channel default.
 
 ### `/openrouter image`
+
 Generate a new image or remix an uploaded one.
 
 - **Core Inputs:** `prompt`, optional `model`, optional `attachment`.
@@ -64,6 +67,7 @@ Generate a new image or remix an uploaded one.
 - **Model Requirement:** the selected model should advertise `image` in its OpenRouter `output_modalities`.
 
 ### `/openrouter video`
+
 Generate a video from a text prompt, with an optional reference image.
 
 - **Core Inputs:** `prompt`, optional `model`, optional `attachment`.
@@ -74,6 +78,7 @@ Generate a video from a text prompt, with an optional reference image.
 - **Model Requirement:** the selected model should advertise `video` in its OpenRouter `output_modalities`. If you use a reference image, the model should also advertise `image` input.
 
 ### `/openrouter tts`
+
 Convert text into speech audio.
 
 - **Core Inputs:** `input`, optional `model`.
@@ -84,6 +89,7 @@ Convert text into speech audio.
 - **Model Requirement:** the selected model should advertise `audio` in its OpenRouter `output_modalities`.
 
 ### `/openrouter stt`
+
 Generate text from an uploaded audio file.
 
 - **Core Inputs:** required `attachment`, optional `model`.
@@ -93,9 +99,11 @@ Generate text from an uploaded audio file.
 - **Model Requirement:** the selected model should advertise `audio` in its `input_modalities` and `text` in its `output_modalities`.
 
 ### `/openrouter current_model`
+
 Show the active conversation model, the saved channel default, and the global fallback model.
 
 ### `/openrouter models`
+
 Search models visible to your OpenRouter API key.
 
 - Queries the user-filtered model catalog when possible.
@@ -104,6 +112,7 @@ Search models visible to your OpenRouter API key.
 - Useful for finding exact model IDs like `minimax/minimax-m2.7`.
 
 ### `/openrouter check_permissions`
+
 Check whether the bot can read the current channel and message history.
 
 ## Multimodal Notes
