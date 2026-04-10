@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from typing import TypeAlias
+from typing import Any, TypeAlias
 
 from discord import Member, Message, User
 
@@ -146,7 +146,7 @@ def create_button_view(
     cog,
     user_or_id: Member | User | int,
     conversation_id: int,
-    tools: list[dict[str, object]] | None = None,
+    tools: list[dict[str, Any]] | None = None,
 ) -> ButtonView:
     user_id = user_or_id if isinstance(user_or_id, int) else user_or_id.id
     return ButtonView(
