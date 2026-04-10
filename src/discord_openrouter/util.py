@@ -20,6 +20,10 @@ class ModelPricing:
     request: float = 0.0
     image: float = 0.0
     audio: float = 0.0
+    web_search: float = 0.0
+    internal_reasoning: float = 0.0
+    input_cache_read: float = 0.0
+    input_cache_write: float = 0.0
 
 
 @dataclass(slots=True)
@@ -47,7 +51,31 @@ class ChatUsage:
     output_audio_tokens: int = 0
     output_image_tokens: int = 0
     cost: float | None = None
+    upstream_inference_cost: float | None = None
     server_tool_use: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class CostBreakdown:
+    input: float = 0.0
+    cache_read: float = 0.0
+    cache_write: float = 0.0
+    output: float = 0.0
+    reasoning: float = 0.0
+    request: float = 0.0
+    web_search: float = 0.0
+
+    @property
+    def total(self) -> float:
+        return (
+            self.input
+            + self.cache_read
+            + self.cache_write
+            + self.output
+            + self.reasoning
+            + self.request
+            + self.web_search
+        )
 
 
 @dataclass(slots=True)
@@ -121,6 +149,10 @@ def parse_model_info(raw_model: dict[str, Any]) -> ModelInfo:
             request=_safe_float(pricing_payload.get("request")),
             image=_safe_float(pricing_payload.get("image")),
             audio=_safe_float(pricing_payload.get("audio")),
+            web_search=_safe_float(pricing_payload.get("web_search")),
+            internal_reasoning=_safe_float(pricing_payload.get("internal_reasoning")),
+            input_cache_read=_safe_float(pricing_payload.get("input_cache_read")),
+            input_cache_write=_safe_float(pricing_payload.get("input_cache_write")),
         ),
     )
 
@@ -132,6 +164,7 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
     )
     prompt_tokens = _safe_int(usage.get("prompt_tokens") or usage.get("input_tokens"))
     total_tokens = _safe_int(usage.get("total_tokens"))
+    cost_details = usage.get("cost_details") or {}
     prompt_details = usage.get("prompt_tokens_details") or {}
     reasoning_tokens = _safe_int(
         usage.get("reasoning_tokens")
@@ -163,18 +196,49 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
         output_audio_tokens=output_audio_tokens,
         output_image_tokens=output_image_tokens,
         cost=_safe_float_or_none(usage.get("cost")),
+        upstream_inference_cost=_safe_float_or_none(cost_details.get("upstream_inference_cost")),
         server_tool_use=_coerce_int_mapping(usage.get("server_tool_use")),
     )
 
 
-def calculate_cost(model_info: ModelInfo | None, usage: ChatUsage) -> float | None:
+def calculate_cost_breakdown(
+    model_info: ModelInfo | None,
+    usage: ChatUsage,
+) -> CostBreakdown | None:
     if model_info is None:
         return None
     pricing = model_info.pricing
-    return (
-        usage.prompt_tokens * pricing.prompt
-        + usage.completion_tokens * pricing.completion
-        + pricing.request
+    web_search_requests = extract_web_search_requests(usage.server_tool_use)
+    uncached_prompt_tokens = max(
+        usage.prompt_tokens - usage.cached_tokens - usage.cache_write_tokens,
+        0,
+    )
+    non_reasoning_completion_tokens = max(
+        usage.completion_tokens - usage.reasoning_tokens,
+        0,
+    )
+    return CostBreakdown(
+        input=uncached_prompt_tokens * pricing.prompt,
+        cache_read=usage.cached_tokens * pricing.input_cache_read,
+        cache_write=usage.cache_write_tokens * pricing.input_cache_write,
+        output=non_reasoning_completion_tokens * pricing.completion,
+        reasoning=usage.reasoning_tokens * pricing.internal_reasoning,
+        request=pricing.request,
+        web_search=web_search_requests * pricing.web_search,
+    )
+
+
+def calculate_cost(model_info: ModelInfo | None, usage: ChatUsage) -> float | None:
+    breakdown = calculate_cost_breakdown(model_info, usage)
+    if breakdown is None:
+        return None
+    return breakdown.total
+
+
+def extract_web_search_requests(server_tool_use: dict[str, int]) -> int:
+    return max(
+        _safe_int(server_tool_use.get("web_search_requests")),
+        _safe_int(server_tool_use.get("web_search")),
     )
 
 

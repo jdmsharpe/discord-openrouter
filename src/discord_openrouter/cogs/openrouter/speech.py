@@ -98,7 +98,7 @@ async def run_tts_command(
         return
 
     usage = extract_usage({"usage": response_payload.get("usage") or {}})
-    request_cost = usage.cost
+    request_cost = usage.cost if usage.cost is not None else calculate_cost(model_info, usage)
     daily_cost = track_daily_cost(cog, ctx.author.id, request_cost)
     transcript = _resolve_transcript(response_payload)
     actual_model = response_payload.get("model") or (model_info.id if model_info is not None else resolved_model)

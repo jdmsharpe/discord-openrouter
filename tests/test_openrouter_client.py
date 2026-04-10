@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -216,6 +217,60 @@ def test_get_model_prefers_exact_match(monkeypatch):
 
     assert model is not None
     assert model.id == "minimax/minimax-m2.7"
+
+
+def test_fetch_models_fallback_requests_all_modalities(monkeypatch):
+    class _FakeHttpResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _FakeAsyncClient:
+        calls = []
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, *, headers=None, params=None):
+            self.calls.append({"url": url, "headers": headers, "params": params})
+            if url.endswith("/models/user"):
+                return _FakeHttpResponse(404, {"error": {"message": "not found"}})
+            return _FakeHttpResponse(
+                200,
+                {
+                    "data": [
+                        {
+                            "id": "openai/gpt-image-1",
+                            "name": "GPT Image 1",
+                            "architecture": {
+                                "input_modalities": ["text", "image"],
+                                "output_modalities": ["image"],
+                            },
+                            "pricing": {},
+                        }
+                    ]
+                },
+            )
+
+    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_FakeAsyncClient))
+
+    client = OpenRouterClient(api_key="test-key")
+    models = asyncio.run(client._fetch_models_from_api())
+
+    assert [model.id for model in models] == ["openai/gpt-image-1"]
+    assert _FakeAsyncClient.calls[0]["url"].endswith("/models/user")
+    assert _FakeAsyncClient.calls[0]["params"] is None
+    assert _FakeAsyncClient.calls[1]["url"].endswith("/models")
+    assert _FakeAsyncClient.calls[1]["params"] == {"output_modalities": "all"}
 
 
 class _AsyncLineIterator:

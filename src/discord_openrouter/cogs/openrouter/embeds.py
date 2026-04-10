@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from discord import Colour, Embed
 
-from ...util import ChatUsage, ModelInfo, chunk_text, describe_modalities, truncate_text
+from ...util import (
+    ChatUsage,
+    ModelInfo,
+    calculate_cost_breakdown,
+    chunk_text,
+    describe_modalities,
+    extract_web_search_requests,
+    truncate_text,
+)
 
 
 def error_embed(description: str) -> Embed:
@@ -60,6 +68,7 @@ def append_usage_embed(
     usage: ChatUsage,
     request_cost: float | None,
     daily_cost: float | None,
+    model_info: ModelInfo | None = None,
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
@@ -90,16 +99,19 @@ def append_usage_embed(
         out_part += f" ({', '.join(out_details)})"
     parts.append(f"{in_part} / {out_part}")
 
-    if daily_cost is not None:
-        parts.append(f"daily ${daily_cost:.2f}")
-    web_search_requests = usage.server_tool_use.get("web_search_requests") or usage.server_tool_use.get(
-        "web_search"
-    )
+    web_search_requests = extract_web_search_requests(usage.server_tool_use)
     if web_search_requests:
         suffix = "es" if web_search_requests != 1 else ""
         parts.append(f"{web_search_requests} search{suffix}")
+    if daily_cost is not None:
+        parts.append(f"daily ${daily_cost:.2f}")
 
-    embeds.append(Embed(description=" · ".join(parts), color=Colour.blue()))
+    description = " · ".join(parts)
+    cost_detail_line = _build_cost_detail_line(usage=usage, model_info=model_info)
+    if cost_detail_line:
+        description += "\n" + cost_detail_line
+
+    embeds.append(Embed(description=description, color=Colour.blue()))
 
 
 def append_flat_pricing_embed(
@@ -119,6 +131,28 @@ def append_flat_pricing_embed(
     if not parts:
         return
     embeds.append(Embed(description=" · ".join(parts), color=Colour.blue()))
+
+
+def _build_cost_detail_line(*, usage: ChatUsage, model_info: ModelInfo | None) -> str | None:
+    breakdown = calculate_cost_breakdown(model_info, usage)
+    parts: list[str] = []
+    if breakdown is not None:
+        _append_cost_part(parts, "input", breakdown.input)
+        _append_cost_part(parts, "cache read", breakdown.cache_read)
+        _append_cost_part(parts, "cache write", breakdown.cache_write)
+        _append_cost_part(parts, "output", breakdown.output)
+        _append_cost_part(parts, "reasoning", breakdown.reasoning)
+        _append_cost_part(parts, "request", breakdown.request)
+        _append_cost_part(parts, "search", breakdown.web_search)
+    if usage.upstream_inference_cost is not None:
+        _append_cost_part(parts, "upstream", usage.upstream_inference_cost)
+    return " · ".join(parts) or None
+
+
+def _append_cost_part(parts: list[str], label: str, amount: float) -> None:
+    if amount <= 0:
+        return
+    parts.append(f"{label} ${amount:.4f}")
 
 
 def build_model_status_embed(
