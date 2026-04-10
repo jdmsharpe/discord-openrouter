@@ -6,6 +6,7 @@ from typing import TypeAlias
 from discord import Member, Message, User
 
 from ...util import Conversation
+from .tool_registry import get_tool_registry
 from .views import ButtonView
 
 UserId: TypeAlias = int
@@ -141,15 +142,34 @@ def track_daily_cost(cog, user_id: int, cost: float | None) -> float | None:
     return new_total
 
 
-def create_button_view(cog, user_or_id: Member | User | int, conversation_id: int) -> ButtonView:
+def create_button_view(
+    cog,
+    user_or_id: Member | User | int,
+    conversation_id: int,
+    tools: list[dict[str, object]] | None = None,
+) -> ButtonView:
     user_id = user_or_id if isinstance(user_or_id, int) else user_or_id.id
     return ButtonView(
         conversation_starter_id=user_id,
         conversation_id=conversation_id,
+        initial_tools=tools,
         get_conversation=lambda cid: cog.conversation_histories.get(cid),
         on_regenerate=cog.regenerate_conversation_response,
         on_stop=cog._stop_conversation,
+        on_tools_changed=lambda selected_values, conversation: handle_tools_changed(
+            selected_values,
+            conversation,
+        ),
     )
+
+
+def handle_tools_changed(selected_values: list[str], conversation: Conversation) -> tuple[set[str], str | None]:
+    registry = get_tool_registry()
+    active_names = {value for value in selected_values if value in registry}
+    conversation.settings.web_search = "web_search" in active_names
+    conversation.settings.datetime = "datetime" in active_names
+    conversation.touch()
+    return active_names, None
 
 
 def find_active_conversation(cog, *, channel_id: int, user_id: int) -> Conversation | None:

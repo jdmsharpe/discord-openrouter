@@ -7,8 +7,11 @@ from discord_openrouter.util import (
     ModelInfo,
     ModelPricing,
     build_context_compression_plugins,
+    build_datetime_tools,
     build_prompt_cache_control,
     build_pdf_plugins,
+    build_web_plugin_override,
+    build_web_search_tools,
     calculate_cost,
     calculate_cost_breakdown,
     describe_chat_settings,
@@ -252,6 +255,18 @@ def test_build_pdf_plugins_returns_expected_payload():
     assert build_pdf_plugins(None) is None
 
 
+def test_build_web_plugin_override_returns_expected_payload():
+    assert build_web_plugin_override(enabled=False) == [{"id": "web", "enabled": False}]
+
+
+def test_build_web_search_tools_returns_expected_payload():
+    assert build_web_search_tools() == [{"type": "openrouter:web_search"}]
+
+
+def test_build_datetime_tools_returns_expected_payload():
+    assert build_datetime_tools() == [{"type": "openrouter:datetime"}]
+
+
 def test_build_context_compression_plugins_returns_expected_payload():
     assert build_context_compression_plugins(True) == [{"id": "context-compression"}]
     assert build_context_compression_plugins(False) == [{"id": "context-compression", "enabled": False}]
@@ -282,6 +297,7 @@ def test_describe_chat_settings_summarizes_active_options():
             context_compression=False,
             prompt_cache_ttl="1h",
             web_search=True,
+            datetime=True,
             reasoning_max_tokens=2048,
             exclude_reasoning=True,
         )
@@ -289,5 +305,5 @@ def test_describe_chat_settings_summarizes_active_options():
 
     assert summary == (
         "pdf `mistral-ocr`, context compression off, prompt cache `1h`, "
-        "web search, reasoning `2048` tokens, hidden reasoning"
+        "web search, datetime, reasoning `2048` tokens, hidden reasoning"
     )

@@ -4,8 +4,10 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from discord import ButtonStyle, Interaction
-from discord.ui import Button, View, button
+from discord import ButtonStyle, Interaction, SelectOption
+from discord.ui import Button, Select, View, button
+
+from .tool_registry import get_tool_select_options, is_known_tool, resolve_tool_name
 
 
 async def _send_interaction_error(interaction: Interaction, context: str, error: Exception) -> None:
@@ -23,9 +25,11 @@ class ButtonView(View):
         *,
         conversation_starter_id: int,
         conversation_id: int,
+        initial_tools: list[dict[str, Any]] | None = None,
         get_conversation: Callable[[int], Any | None],
         on_regenerate: Callable[[Interaction, Any], Awaitable[None]],
         on_stop: Callable[[int, Any], Awaitable[None]],
+        on_tools_changed: Callable[[list[str], Any], tuple[set[str], str | None]],
     ):
         super().__init__(timeout=None)
         self.conversation_starter_id = conversation_starter_id
@@ -33,6 +37,68 @@ class ButtonView(View):
         self._get_conversation = get_conversation
         self._on_regenerate = on_regenerate
         self._on_stop = on_stop
+        self._on_tools_changed = on_tools_changed
+        self._add_tool_select(initial_tools or [])
+
+    def _add_tool_select(self, initial_tools: list[dict[str, Any]]) -> None:
+        selected_tool_names = {
+            name for tool in initial_tools if (name := resolve_tool_name(tool)) is not None
+        }
+        options = [
+            SelectOption(**option) for option in get_tool_select_options(selected_tool_names)
+        ]
+        tool_select = Select(
+            placeholder="Tools",
+            options=options,
+            min_values=0,
+            max_values=len(options),
+            row=1,
+        )
+
+        async def _tool_callback(interaction: Interaction) -> None:
+            await self.tool_select_callback(interaction, tool_select)
+
+        tool_select.callback = _tool_callback
+        self.add_item(tool_select)
+
+    async def tool_select_callback(self, interaction: Interaction, tool_select: Select) -> None:
+        try:
+            user = interaction.user
+            if user is None or user.id != self.conversation_starter_id:
+                await interaction.response.send_message(
+                    "You are not allowed to change tools for this conversation.",
+                    ephemeral=True,
+                )
+                return
+
+            conversation = self._get_conversation(self.conversation_id)
+            if conversation is None:
+                await interaction.response.send_message(
+                    "No active conversation found.",
+                    ephemeral=True,
+                )
+                return
+
+            selected_values = [value for value in tool_select.values if is_known_tool(value)]
+            active_names, error_message = self._on_tools_changed(selected_values, conversation)
+            if error_message:
+                await interaction.response.send_message(error_message, ephemeral=True)
+                return
+
+            for child in self.children:
+                if isinstance(child, Select):
+                    for option in child.options:
+                        option.default = option.value in active_names
+                    break
+
+            status = ", ".join(sorted(active_names)) if active_names else "none"
+            await interaction.response.send_message(
+                f"Tools updated: {status}.",
+                ephemeral=True,
+                delete_after=3,
+            )
+        except Exception as error:
+            await _send_interaction_error(interaction, "updating tools", error)
 
     @button(emoji="🔄", style=ButtonStyle.green, row=0)
     async def regenerate_button(self, _: Button, interaction: Interaction):

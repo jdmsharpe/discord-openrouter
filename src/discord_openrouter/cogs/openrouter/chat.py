@@ -10,7 +10,7 @@ from ...config import OPENROUTER_DEFAULT_PDF_ENGINE, OPENROUTER_DEFAULT_TEXT_MOD
 from ...util import (
     build_context_compression_plugins,
     build_prompt_cache_control,
-    build_web_plugins,
+    build_web_plugin_override,
     ChatSettings,
     Conversation,
     build_pdf_plugins,
@@ -43,6 +43,7 @@ from .embeds import (
 )
 from .image import build_image_assets, build_image_files
 from .state import find_active_conversation, remember_view_state, track_daily_cost
+from .tool_registry import build_runtime_tools
 
 
 async def keep_typing(channel) -> None:
@@ -102,6 +103,7 @@ async def run_chat_command(
     context_compression: bool | None = None,
     prompt_cache_ttl: str | None = None,
     web_search: bool = False,
+    datetime: bool = False,
     reasoning_effort: str | None = None,
     reasoning_max_tokens: int | None = None,
     exclude_reasoning: bool = False,
@@ -192,6 +194,7 @@ async def run_chat_command(
             context_compression=context_compression,
             prompt_cache_ttl=prompt_cache_ttl,
             web_search=web_search,
+            datetime=datetime,
             reasoning_effort=reasoning_effort,
             reasoning_max_tokens=reasoning_max_tokens,
             exclude_reasoning=exclude_reasoning,
@@ -212,8 +215,8 @@ async def run_chat_command(
             attachment_requirements=attachment_requirements,
             pdf_engine=resolved_pdf_engine,
             context_compression=context_compression,
-            web_search=web_search,
         ),
+        request_tools=_build_request_tools(web_search=web_search, datetime=datetime),
         request_cache_control=cache_control,
         intro_embeds=[
             build_model_status_embed(
@@ -271,7 +274,10 @@ async def handle_new_message_in_conversation(cog, message: Message, conversation
             attachment_requirements=attachment_requirements,
             pdf_engine=conversation.settings.pdf_engine,
             context_compression=conversation.settings.context_compression,
+        ),
+        request_tools=_build_request_tools(
             web_search=conversation.settings.web_search,
+            datetime=conversation.settings.datetime,
         ),
         request_cache_control=build_prompt_cache_control(conversation.settings.prompt_cache_ttl),
     )
@@ -307,7 +313,10 @@ async def regenerate_conversation_response(cog, interaction: Interaction, conver
             attachment_requirements=attachment_requirements,
             pdf_engine=conversation.settings.pdf_engine,
             context_compression=conversation.settings.context_compression,
+        ),
+        request_tools=_build_request_tools(
             web_search=conversation.settings.web_search,
+            datetime=conversation.settings.datetime,
         ),
         request_cache_control=build_prompt_cache_control(conversation.settings.prompt_cache_ttl),
     )
@@ -324,6 +333,7 @@ async def _run_conversation_turn(
     channel,
     model_info_hint=None,
     request_plugins: list[dict[str, Any]] | None = None,
+    request_tools: list[dict[str, Any]] | None = None,
     request_cache_control: dict[str, Any] | None = None,
     intro_embeds: list[Embed] | None = None,
 ) -> bool:
@@ -335,6 +345,7 @@ async def _run_conversation_turn(
             model=conversation.settings.model,
             messages=conversation.build_api_messages(),
             plugins=request_plugins,
+            tools=request_tools,
             cache_control=request_cache_control,
             temperature=conversation.settings.temperature,
             top_p=conversation.settings.top_p,
@@ -412,7 +423,11 @@ async def _run_conversation_turn(
 
         conversation.append_assistant_message(assistant_message)
         await cog._strip_previous_view(conversation.conversation_id)
-        view = cog._create_button_view(user_id, conversation.conversation_id)
+        view = cog._create_button_view(
+            user_id,
+            conversation.conversation_id,
+            tools=request_tools,
+        )
 
         try:
             send_kwargs: dict[str, Any] = {
@@ -503,15 +518,27 @@ def _build_request_plugins(
     attachment_requirements: AttachmentRequirements,
     pdf_engine: str | None,
     context_compression: bool | None = None,
-    web_search: bool = False,
 ) -> list[dict[str, Any]] | None:
     plugins: list[dict[str, Any]] = []
     if attachment_requirements.has_pdf:
         plugins.extend(build_pdf_plugins(pdf_engine) or [])
     plugins.extend(build_context_compression_plugins(context_compression) or [])
-    if web_search:
-        plugins.extend(build_web_plugins())
+    plugins.extend(build_web_plugin_override(enabled=False))
     return plugins or None
+
+
+def _build_request_tools(
+    *,
+    web_search: bool = False,
+    datetime: bool = False,
+) -> list[dict[str, Any]] | None:
+    selected_tool_names: list[str] = []
+    if web_search:
+        selected_tool_names.append("web_search")
+    if datetime:
+        selected_tool_names.append("datetime")
+    tools = build_runtime_tools(selected_tool_names)
+    return tools or None
 
 
 def _validate_prompt_cache_request(*, model: str, prompt_cache_ttl: str | None) -> str | None:

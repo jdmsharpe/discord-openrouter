@@ -65,6 +65,7 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
             modalities=["image", "text"],
             image_config={"aspect_ratio": "16:9", "image_size": "2K"},
             plugins=[{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}],
+            tools=[{"type": "openrouter:web_search"}],
             cache_control={"type": "ephemeral", "ttl": "1h"},
             temperature=0.5,
             top_p=0.9,
@@ -83,6 +84,7 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.chat.calls[0]["modalities"] == ["image", "text"]
     assert instance.chat.calls[0]["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
     assert instance.chat.calls[0]["plugins"] == [{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}]
+    assert instance.chat.calls[0]["tools"] == [{"type": "openrouter:web_search"}]
     assert instance.chat.calls[0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert instance.chat.calls[0]["reasoning"] == {"effort": "high"}
     assert payload["usage"]["total_tokens"] == 30

@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("discord")
 
-from discord_openrouter.cogs.openrouter.state import prune_runtime_state
+from discord_openrouter.cogs.openrouter.state import handle_tools_changed, prune_runtime_state
 from discord_openrouter.util import ChatSettings, Conversation
 
 
@@ -67,3 +67,43 @@ def test_prune_runtime_state_removes_stale_entries_and_preserves_active_entries(
     active_message.edit.assert_not_awaited()
     assert (11, old_day) not in cog.daily_costs
     assert (22, today) in cog.daily_costs
+
+
+def test_handle_tools_changed_updates_conversation_settings():
+    conversation = Conversation(
+        conversation_id=1,
+        conversation_starter_id=11,
+        channel_id=100,
+        settings=ChatSettings(
+            model="openai/gpt-5.2",
+            web_search=False,
+            datetime=False,
+        ),
+    )
+
+    active_names, error = handle_tools_changed(["web_search", "datetime"], conversation)
+
+    assert error is None
+    assert active_names == {"web_search", "datetime"}
+    assert conversation.settings.web_search is True
+    assert conversation.settings.datetime is True
+
+
+def test_handle_tools_changed_ignores_unknown_values_and_disables_unselected_tools():
+    conversation = Conversation(
+        conversation_id=1,
+        conversation_starter_id=11,
+        channel_id=100,
+        settings=ChatSettings(
+            model="openai/gpt-5.2",
+            web_search=True,
+            datetime=True,
+        ),
+    )
+
+    active_names, error = handle_tools_changed(["not_real"], conversation)
+
+    assert error is None
+    assert active_names == set()
+    assert conversation.settings.web_search is False
+    assert conversation.settings.datetime is False
