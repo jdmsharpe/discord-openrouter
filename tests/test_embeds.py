@@ -2,7 +2,7 @@ import pytest
 
 pytest.importorskip("discord")
 
-from discord_openrouter.cogs.openrouter.embeds import append_usage_embed
+from discord_openrouter.cogs.openrouter.embeds import append_flat_pricing_embed, append_usage_embed
 from discord_openrouter.util import ChatUsage, ModelInfo, ModelPricing
 
 
@@ -25,7 +25,7 @@ def test_append_usage_embed_matches_compact_footer_convention():
     assert len(embeds) == 1
     description = embeds[0].description
     assert description is not None
-    assert description.startswith("$0.0500")
+    assert description.startswith("$0.05")
     assert "1,000 tokens in (300 cached)" in description
     assert "500 tokens out (200 reasoning)" in description
     assert "2 searches" in description
@@ -70,11 +70,58 @@ def test_append_usage_embed_adds_second_line_for_cost_breakdown_and_upstream():
     assert description is not None
     lines = description.splitlines()
     assert len(lines) == 2
-    assert "input $60.0000" in lines[1]
-    assert "cache read $150.0000" in lines[1]
-    assert "cache write $60.0000" in lines[1]
-    assert "output $60.0000" in lines[1]
-    assert "reasoning $80.0000" in lines[1]
-    assert "request $3.0000" in lines[1]
-    assert "search $14.0000" in lines[1]
-    assert "upstream $19.0000" in lines[1]
+    assert "input $60.00" in lines[1]
+    assert "cache read $150.00" in lines[1]
+    assert "cache write $60.00" in lines[1]
+    assert "output $60.00" in lines[1]
+    assert "reasoning $80.00" in lines[1]
+    assert "request $3.00" in lines[1]
+    assert "search $14.00" in lines[1]
+    assert "upstream $19.00" in lines[1]
+
+
+def test_append_usage_embed_uses_subcent_and_round_up_currency_formatting():
+    embeds = []
+    model_info = ModelInfo(
+        id="openai/gpt-5.2",
+        name="GPT-5.2",
+        pricing=ModelPricing(
+            prompt=0.0048,
+            completion=0.0004,
+        ),
+    )
+
+    append_usage_embed(
+        embeds,
+        usage=ChatUsage(
+            prompt_tokens=1,
+            completion_tokens=1,
+        ),
+        request_cost=0.0052,
+        daily_cost=1.501,
+        model_info=model_info,
+    )
+
+    assert len(embeds) == 1
+    description = embeds[0].description
+    assert description is not None
+    lines = description.splitlines()
+    assert lines[0].startswith("<$0.01")
+    assert "daily $1.51" in lines[0]
+    assert "input <$0.01" in lines[1]
+    assert "output <$0.01" in lines[1]
+
+
+def test_append_flat_pricing_embed_uses_compact_currency_formatting():
+    embeds = []
+
+    append_flat_pricing_embed(
+        embeds,
+        request_cost=0.0052,
+        daily_cost=1.501,
+        details="video generation",
+    )
+
+    assert len(embeds) == 1
+    description = embeds[0].description
+    assert description == "<$0.01 · video generation · daily $1.51"

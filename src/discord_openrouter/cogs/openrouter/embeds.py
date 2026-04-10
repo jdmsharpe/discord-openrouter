@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_CEILING
+
 from discord import Colour, Embed
 
 from ...util import (
@@ -72,7 +74,7 @@ def append_usage_embed(
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
-        parts.append(f"${request_cost:.4f}")
+        parts.append(_format_currency_amount(request_cost))
 
     in_part = f"{usage.prompt_tokens:,} tokens in"
     in_details: list[str] = []
@@ -104,7 +106,7 @@ def append_usage_embed(
         suffix = "es" if web_search_requests != 1 else ""
         parts.append(f"{web_search_requests} search{suffix}")
     if daily_cost is not None:
-        parts.append(f"daily ${daily_cost:.2f}")
+        parts.append(f"daily {_format_currency_amount(daily_cost)}")
 
     description = " · ".join(parts)
     cost_detail_line = _build_cost_detail_line(usage=usage, model_info=model_info)
@@ -123,11 +125,11 @@ def append_flat_pricing_embed(
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
-        parts.append(f"${request_cost:.4f}")
+        parts.append(_format_currency_amount(request_cost))
     if details:
         parts.append(details)
     if daily_cost is not None:
-        parts.append(f"daily ${daily_cost:.2f}")
+        parts.append(f"daily {_format_currency_amount(daily_cost)}")
     if not parts:
         return
     embeds.append(Embed(description=" · ".join(parts), color=Colour.blue()))
@@ -152,7 +154,17 @@ def _build_cost_detail_line(*, usage: ChatUsage, model_info: ModelInfo | None) -
 def _append_cost_part(parts: list[str], label: str, amount: float) -> None:
     if amount <= 0:
         return
-    parts.append(f"{label} ${amount:.4f}")
+    parts.append(f"{label} {_format_currency_amount(amount)}")
+
+
+def _format_currency_amount(amount: float) -> str:
+    decimal_amount = Decimal(str(amount))
+    if decimal_amount <= 0:
+        return "$0.00"
+    if decimal_amount < Decimal("0.01"):
+        return "<$0.01"
+    rounded = decimal_amount.quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+    return f"${rounded}"
 
 
 def build_model_status_embed(
