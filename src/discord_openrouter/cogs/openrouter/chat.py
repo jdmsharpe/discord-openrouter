@@ -383,21 +383,30 @@ async def _run_conversation_turn(
         usage = extract_usage(response_payload)
         tool_call_counts = _extract_tool_call_counts(assistant_message)
         model_info = model_info_hint or await cog.openrouter_client.get_model(conversation.settings.model)
-        request_cost = usage.cost if usage.cost is not None else calculate_cost(model_info, usage)
+        estimated_cost = calculate_cost(model_info, usage)
+        request_cost = usage.cost if usage.cost is not None else estimated_cost
         daily_cost = track_daily_cost(cog, user_id, request_cost)
+        response_id = response_payload.get("id") if isinstance(response_payload.get("id"), str) else "unknown"
+        cost_source = "api" if usage.cost is not None else "estimate"
 
         cog.logger.info(
-            "COST | command=chat | user=%s | model=%s | prompt_tokens=%s | completion_tokens=%s"
+            "COST | command=chat | response_id=%s | cost_source=%s | user=%s | model=%s"
+            " | prompt_tokens=%s | completion_tokens=%s | total_tokens=%s"
             " | cached_tokens=%s | reasoning_tokens=%s | server_tools=%s | tool_calls=%s"
-            " | cost=%s | daily=%s",
+            " | api_cost=%s | estimated_cost=%s | cost=%s | daily=%s",
+            response_id,
+            cost_source,
             user_id,
             conversation.settings.model,
             usage.prompt_tokens,
             usage.completion_tokens,
+            usage.total_tokens,
             usage.cached_tokens,
             usage.reasoning_tokens,
             _format_tool_counts(usage.server_tool_use),
             _format_tool_counts(tool_call_counts),
+            f"${usage.cost:.6f}" if usage.cost is not None else "unknown",
+            f"${estimated_cost:.6f}" if estimated_cost is not None else "unknown",
             f"${request_cost:.6f}" if request_cost is not None else "unknown",
             f"${daily_cost:.6f}" if daily_cost is not None else "unknown",
         )

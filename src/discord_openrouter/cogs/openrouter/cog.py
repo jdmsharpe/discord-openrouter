@@ -188,7 +188,7 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "context_compression",
-        description="Optional override for OpenRouter context compression. Set false to disable default compression on smaller-context models.",
+        description="Override OpenRouter context compression. Set false to disable it.",
         required=False,
         type=bool,
     )
@@ -198,18 +198,6 @@ class OpenRouterCog(commands.Cog):
         required=False,
         type=str,
         choices=PROMPT_CACHE_TTL_CHOICES,
-    )
-    @option(
-        "web_search",
-        description="Enable OpenRouter web search for current information. (default: false)",
-        required=False,
-        type=bool,
-    )
-    @option(
-        "datetime",
-        description="Enable OpenRouter datetime awareness for time-sensitive prompts. (default: false)",
-        required=False,
-        type=bool,
     )
     @option(
         "reasoning_effort",
@@ -230,6 +218,18 @@ class OpenRouterCog(commands.Cog):
         required=False,
         type=bool,
     )
+    @option(
+        "web_search",
+        description="Enable OpenRouter web search for current information. (default: false)",
+        required=False,
+        type=bool,
+    )
+    @option(
+        "datetime",
+        description="Enable OpenRouter datetime awareness for time-sensitive prompts. (default: false)",
+        required=False,
+        type=bool,
+    )
     async def chat(
         self,
         ctx: ApplicationContext,
@@ -243,11 +243,11 @@ class OpenRouterCog(commands.Cog):
         max_tokens: int | None = None,
         context_compression: bool | None = None,
         prompt_cache_ttl: str | None = None,
-        web_search: bool | None = None,
-        datetime: bool | None = None,
         reasoning_effort: str | None = None,
         reasoning_max_tokens: int | None = None,
         exclude_reasoning: bool | None = None,
+        web_search: bool | None = None,
+        datetime: bool | None = None,
     ):
         await run_chat_command(
             self,
