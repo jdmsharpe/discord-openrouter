@@ -53,6 +53,7 @@ class OpenRouterClient:
         modalities: list[str] | None = None,
         image_config: dict[str, Any] | None = None,
         plugins: list[dict[str, Any]] | None = None,
+        tools: list[dict[str, Any]] | None = None,
         cache_control: dict[str, Any] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -80,6 +81,8 @@ class OpenRouterClient:
             request_kwargs["image_config"] = dict(image_config)
         if plugins:
             request_kwargs["plugins"] = [dict(plugin) for plugin in plugins]
+        if tools:
+            request_kwargs["tools"] = [dict(tool) for tool in tools]
         if cache_control:
             request_kwargs["cache_control"] = dict(cache_control)
         if temperature is not None:

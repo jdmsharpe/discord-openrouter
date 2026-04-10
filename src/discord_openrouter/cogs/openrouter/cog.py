@@ -82,8 +82,8 @@ class OpenRouterCog(commands.Cog):
     async def _prune_runtime_state(self) -> None:
         await prune_runtime_state(self)
 
-    def _create_button_view(self, user, conversation_id: int):
-        return create_button_view(self, user, conversation_id)
+    def _create_button_view(self, user, conversation_id: int, tools=None):
+        return create_button_view(self, user, conversation_id, tools=tools)
 
     async def handle_new_message_in_conversation(self, message, conversation):
         await handle_conversation_message(self, message, conversation)
@@ -202,6 +202,12 @@ class OpenRouterCog(commands.Cog):
         type=bool,
     )
     @option(
+        "datetime",
+        description="Enable OpenRouter datetime awareness for time-sensitive prompts. (default: false)",
+        required=False,
+        type=bool,
+    )
+    @option(
         "reasoning_effort",
         description="Reasoning effort for supported models.",
         required=False,
@@ -234,6 +240,7 @@ class OpenRouterCog(commands.Cog):
         context_compression: bool | None = None,
         prompt_cache_ttl: str | None = None,
         web_search: bool | None = None,
+        datetime: bool | None = None,
         reasoning_effort: str | None = None,
         reasoning_max_tokens: int | None = None,
         exclude_reasoning: bool | None = None,
@@ -252,6 +259,7 @@ class OpenRouterCog(commands.Cog):
             context_compression=context_compression,
             prompt_cache_ttl=prompt_cache_ttl,
             web_search=bool(web_search),
+            datetime=bool(datetime),
             reasoning_effort=reasoning_effort,
             reasoning_max_tokens=reasoning_max_tokens,
             exclude_reasoning=bool(exclude_reasoning),

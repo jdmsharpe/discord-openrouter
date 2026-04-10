@@ -6,6 +6,7 @@ from discord_openrouter.cogs.openrouter.attachments import AttachmentRequirement
 from discord_openrouter.cogs.openrouter.chat import (
     _append_image_embeds,
     _build_request_plugins,
+    _build_request_tools,
     _validate_prompt_cache_request,
     _validate_model_input_modalities,
 )
@@ -51,32 +52,32 @@ def test_build_request_plugins_adds_pdf_parser_for_pdf_turns():
         attachment_requirements=AttachmentRequirements(has_pdf=True),
         pdf_engine="pdf-text",
         context_compression=None,
-        web_search=False,
     )
 
-    assert plugins == [{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}]
+    assert plugins == [
+        {"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}},
+        {"id": "web", "enabled": False},
+    ]
     assert (
         _build_request_plugins(
             attachment_requirements=AttachmentRequirements(has_pdf=False),
             pdf_engine="cloudflare-ai",
             context_compression=None,
-            web_search=False,
         )
-        is None
+        == [{"id": "web", "enabled": False}]
     )
 
 
-def test_build_request_plugins_can_combine_pdf_and_web_search():
+def test_build_request_plugins_disables_deprecated_web_plugin_even_when_web_search_is_enabled():
     plugins = _build_request_plugins(
         attachment_requirements=AttachmentRequirements(has_pdf=True),
         pdf_engine="cloudflare-ai",
         context_compression=None,
-        web_search=True,
     )
 
     assert plugins == [
         {"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}},
-        {"id": "web"},
+        {"id": "web", "enabled": False},
     ]
 
 
@@ -85,10 +86,12 @@ def test_build_request_plugins_can_include_context_compression():
         attachment_requirements=AttachmentRequirements(has_pdf=False),
         pdf_engine=None,
         context_compression=True,
-        web_search=False,
     )
 
-    assert plugins == [{"id": "context-compression"}]
+    assert plugins == [
+        {"id": "context-compression"},
+        {"id": "web", "enabled": False},
+    ]
 
 
 def test_build_request_plugins_can_explicitly_disable_context_compression():
@@ -96,10 +99,24 @@ def test_build_request_plugins_can_explicitly_disable_context_compression():
         attachment_requirements=AttachmentRequirements(has_pdf=False),
         pdf_engine=None,
         context_compression=False,
-        web_search=False,
     )
 
-    assert plugins == [{"id": "context-compression", "enabled": False}]
+    assert plugins == [
+        {"id": "context-compression", "enabled": False},
+        {"id": "web", "enabled": False},
+    ]
+
+
+def test_build_request_tools_uses_openrouter_web_search_server_tool():
+    assert _build_request_tools(web_search=True) == [{"type": "openrouter:web_search"}]
+    assert _build_request_tools(web_search=False) is None
+
+
+def test_build_request_tools_can_include_multiple_openrouter_server_tools():
+    assert _build_request_tools(web_search=True, datetime=True) == [
+        {"type": "openrouter:web_search"},
+        {"type": "openrouter:datetime"},
+    ]
 
 
 def test_validate_prompt_cache_request_limits_explicit_cache_control_to_anthropic():

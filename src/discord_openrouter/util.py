@@ -86,6 +86,7 @@ class ChatSettings:
     top_p: float | None = None
     max_tokens: int | None = None
     web_search: bool = False
+    datetime: bool = False
     context_compression: bool | None = None
     prompt_cache_ttl: str | None = None
     reasoning_effort: str | None = None
@@ -378,8 +379,16 @@ def build_pdf_plugins(pdf_engine: str | None) -> list[dict[str, Any]] | None:
     ]
 
 
-def build_web_plugins() -> list[dict[str, Any]]:
-    return [{"id": "web"}]
+def build_web_plugin_override(*, enabled: bool) -> list[dict[str, Any]]:
+    return [{"id": "web", "enabled": enabled}]
+
+
+def build_web_search_tools() -> list[dict[str, Any]]:
+    return [{"type": "openrouter:web_search"}]
+
+
+def build_datetime_tools() -> list[dict[str, Any]]:
+    return [{"type": "openrouter:datetime"}]
 
 
 def build_context_compression_plugins(enabled: bool | None) -> list[dict[str, Any]] | None:
@@ -428,6 +437,8 @@ def describe_chat_settings(settings: ChatSettings) -> str | None:
         parts.append(f"prompt cache `{settings.prompt_cache_ttl}`")
     if settings.web_search:
         parts.append("web search")
+    if settings.datetime:
+        parts.append("datetime")
     if settings.reasoning_max_tokens is not None:
         parts.append(f"reasoning `{settings.reasoning_max_tokens}` tokens")
     elif settings.reasoning_effort:
