@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_CEILING
+from decimal import ROUND_CEILING, Decimal
 
 from discord import Colour, Embed
 
@@ -75,7 +75,9 @@ def append_usage_embed(
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
-        parts.append(_format_display_currency_amount(request_cost, estimated=request_cost_is_estimate))
+        parts.append(
+            _format_display_currency_amount(request_cost, estimated=request_cost_is_estimate)
+        )
 
     in_part = f"{usage.prompt_tokens:,} tokens in"
     in_details: list[str] = []
@@ -127,7 +129,9 @@ def append_flat_pricing_embed(
 ) -> None:
     parts: list[str] = []
     if request_cost is not None:
-        parts.append(_format_display_currency_amount(request_cost, estimated=request_cost_is_estimate))
+        parts.append(
+            _format_display_currency_amount(request_cost, estimated=request_cost_is_estimate)
+        )
     if details:
         parts.append(details)
     if daily_cost is not None:
@@ -190,6 +194,7 @@ def build_model_status_embed(
     if description:
         lines.append(description)
     return Embed(title=title, description="\n".join(lines), color=Colour.green())
+
 
 def build_model_list_embed(
     models,

@@ -1,7 +1,12 @@
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .cog import OpenRouterCog
+
 __all__ = ["OpenRouterCog"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "OpenRouterCog":
         from .cog import OpenRouterCog
 

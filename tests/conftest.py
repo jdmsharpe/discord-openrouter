@@ -1,7 +1,6 @@
 import sys
 from types import ModuleType
 
-
 try:
     import httpx  # noqa: F401
 except ModuleNotFoundError:

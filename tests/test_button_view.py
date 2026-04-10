@@ -34,7 +34,9 @@ class TestButtonView:
     def test_view_includes_tool_select_with_initial_defaults(self):
         view = _make_button_view(initial_tools=[{"type": "openrouter:web_search"}])
 
-        tool_select = next(component for component in view.children if isinstance(component, Select))
+        tool_select = next(
+            component for component in view.children if isinstance(component, Select)
+        )
 
         assert tool_select.placeholder == "Tools"
         defaults = {option.value for option in tool_select.options if option.default}
@@ -47,7 +49,9 @@ class TestButtonView:
             get_conversation=MagicMock(return_value=conversation),
             on_tools_changed=on_tools_changed,
         )
-        tool_select = next(component for component in view.children if isinstance(component, Select))
+        tool_select = next(
+            component for component in view.children if isinstance(component, Select)
+        )
 
         interaction = MagicMock()
         interaction.user.id = 123

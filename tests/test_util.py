@@ -8,15 +8,15 @@ from discord_openrouter.util import (
     ModelPricing,
     build_context_compression_plugins,
     build_datetime_tools,
-    build_prompt_cache_control,
     build_pdf_plugins,
+    build_prompt_cache_control,
     build_web_plugin_override,
     build_web_search_tools,
     calculate_cost,
     calculate_cost_breakdown,
     describe_chat_settings,
-    extract_url_citations,
     extract_reasoning_text,
+    extract_url_citations,
     extract_usage,
     extract_web_search_requests,
     normalize_pdf_engine,
@@ -269,7 +269,9 @@ def test_build_datetime_tools_returns_expected_payload():
 
 def test_build_context_compression_plugins_returns_expected_payload():
     assert build_context_compression_plugins(True) == [{"id": "context-compression"}]
-    assert build_context_compression_plugins(False) == [{"id": "context-compression", "enabled": False}]
+    assert build_context_compression_plugins(False) == [
+        {"id": "context-compression", "enabled": False}
+    ]
     assert build_context_compression_plugins(None) is None
 
 

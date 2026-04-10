@@ -65,7 +65,9 @@ async def run_image_command(
         return
     except Exception as error:
         cog.logger.error("Failed to normalize image attachment: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed("Failed to process the provided image attachment."))
+        await ctx.followup.send(
+            embed=error_embed("Failed to process the provided image attachment.")
+        )
         return
 
     user_content = build_user_content(prompt, attachment_parts)
@@ -94,14 +96,18 @@ async def run_image_command(
         await ctx.followup.send(embed=error_embed(str(error)))
         return
 
-    choice = ((response_payload.get("choices") or [None])[0])
+    choice = (response_payload.get("choices") or [None])[0]
     if not isinstance(choice, dict):
-        await ctx.followup.send(embed=error_embed("OpenRouter returned no choices for this image request."))
+        await ctx.followup.send(
+            embed=error_embed("OpenRouter returned no choices for this image request.")
+        )
         return
 
     message_payload = choice.get("message") or {}
     if not isinstance(message_payload, dict):
-        await ctx.followup.send(embed=error_embed("OpenRouter returned an unexpected image response message."))
+        await ctx.followup.send(
+            embed=error_embed("OpenRouter returned an unexpected image response message.")
+        )
         return
 
     assistant_message = sanitize_assistant_message(message_payload)
@@ -109,7 +115,9 @@ async def run_image_command(
     files = build_image_files(image_assets)
     if not files:
         await ctx.followup.send(
-            embed=error_embed("The model responded, but no images were returned in the response payload.")
+            embed=error_embed(
+                "The model responded, but no images were returned in the response payload."
+            )
         )
         return
 
@@ -150,7 +158,9 @@ async def run_image_command(
             embeds,
             request_cost=request_cost,
             daily_cost=daily_cost,
-            details=_build_pricing_details(mode=mode, aspect_ratio=aspect_ratio, image_size=image_size),
+            details=_build_pricing_details(
+                mode=mode, aspect_ratio=aspect_ratio, image_size=image_size
+            ),
             request_cost_is_estimate=usage.cost is None and request_cost is not None,
         )
 
@@ -244,8 +254,7 @@ async def build_image_assets(
 
 def build_image_files(image_assets: list[tuple[str, bytes]]) -> list[File]:
     return [
-        File(io.BytesIO(image_bytes), filename=filename)
-        for filename, image_bytes in image_assets
+        File(io.BytesIO(image_bytes), filename=filename) for filename, image_bytes in image_assets
     ]
 
 

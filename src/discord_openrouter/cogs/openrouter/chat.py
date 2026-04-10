@@ -4,21 +4,31 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from discord import ApplicationContext, Attachment, Colour, Embed, HTTPException, Interaction, Message, TextChannel
+from discord import (
+    ApplicationContext,
+    Attachment,
+    Colour,
+    Embed,
+    HTTPException,
+    Interaction,
+    Message,
+    TextChannel,
+    Thread,
+)
 
 from ...config import OPENROUTER_DEFAULT_PDF_ENGINE, OPENROUTER_DEFAULT_TEXT_MODEL, SHOW_COST_EMBEDS
 from ...util import (
-    build_context_compression_plugins,
-    build_prompt_cache_control,
-    build_web_plugin_override,
     ChatSettings,
     Conversation,
+    build_context_compression_plugins,
     build_pdf_plugins,
+    build_prompt_cache_control,
+    build_web_plugin_override,
     calculate_cost,
     describe_chat_settings,
-    extract_url_citations,
     extract_message_text,
     extract_reasoning_text,
+    extract_url_citations,
     extract_usage,
     normalize_pdf_engine,
     prompt_cache_supported_for_model,
@@ -137,9 +147,7 @@ async def run_chat_command(
         return
     if reasoning_effort and reasoning_max_tokens is not None:
         await ctx.followup.send(
-            embed=error_embed(
-                "Use either `reasoning_effort` or `reasoning_max_tokens`, not both."
-            )
+            embed=error_embed("Use either `reasoning_effort` or `reasoning_max_tokens`, not both.")
         )
         return
     if reasoning_max_tokens is not None and reasoning_max_tokens <= 0:
@@ -231,7 +239,9 @@ async def run_chat_command(
         cog.conversation_histories.pop(conversation.conversation_id, None)
 
 
-async def handle_new_message_in_conversation(cog, message: Message, conversation: Conversation) -> None:
+async def handle_new_message_in_conversation(
+    cog, message: Message, conversation: Conversation
+) -> None:
     if message.author.id != conversation.conversation_starter_id or conversation.paused:
         return
 
@@ -285,18 +295,29 @@ async def handle_new_message_in_conversation(cog, message: Message, conversation
         _remove_last_user_message(conversation)
 
 
-async def regenerate_conversation_response(cog, interaction: Interaction, conversation: Conversation) -> None:
+async def regenerate_conversation_response(
+    cog, interaction: Interaction, conversation: Conversation
+) -> None:
     removed_assistant: dict[str, Any] | None = None
     if conversation.messages and conversation.messages[-1].get("role") == "assistant":
         removed_assistant = conversation.messages.pop()
         conversation.touch()
 
     channel = interaction.channel
-    if channel is None:
+    user = interaction.user
+    if channel is None or user is None:
         if removed_assistant is not None:
             conversation.append_assistant_message(removed_assistant)
         await interaction.followup.send(
-            "Could not resolve the current channel.",
+            "Could not resolve the current interaction context.",
+            ephemeral=True,
+        )
+        return
+    if not isinstance(channel, (TextChannel, Thread)):
+        if removed_assistant is not None:
+            conversation.append_assistant_message(removed_assistant)
+        await interaction.followup.send(
+            "This channel does not support regenerated replies.",
             ephemeral=True,
         )
         return
@@ -307,7 +328,7 @@ async def regenerate_conversation_response(cog, interaction: Interaction, conver
         cog,
         conversation=conversation,
         send_reply=channel.send,
-        user_id=interaction.user.id,
+        user_id=user.id,
         channel=channel,
         request_plugins=_build_request_plugins(
             attachment_requirements=attachment_requirements,
@@ -357,7 +378,7 @@ async def _run_conversation_turn(
             session_id=str(conversation.conversation_id),
         )
 
-        choice = ((response_payload.get("choices") or [None])[0])
+        choice = (response_payload.get("choices") or [None])[0]
         if not isinstance(choice, dict):
             raise OpenRouterApiError("OpenRouter returned no choices for this request.")
 
@@ -382,11 +403,15 @@ async def _run_conversation_turn(
                 )
         usage = extract_usage(response_payload)
         tool_call_counts = _extract_tool_call_counts(assistant_message)
-        model_info = model_info_hint or await cog.openrouter_client.get_model(conversation.settings.model)
+        model_info = model_info_hint or await cog.openrouter_client.get_model(
+            conversation.settings.model
+        )
         estimated_cost = calculate_cost(model_info, usage)
         request_cost = usage.cost if usage.cost is not None else estimated_cost
         daily_cost = track_daily_cost(cog, user_id, request_cost)
-        response_id = response_payload.get("id") if isinstance(response_payload.get("id"), str) else "unknown"
+        response_id = (
+            response_payload.get("id") if isinstance(response_payload.get("id"), str) else "unknown"
+        )
         cost_source = "api" if usage.cost is not None else "estimate"
 
         cog.logger.info(

@@ -90,4 +90,3 @@ def build_runtime_tools(selected_tool_names: list[str] | set[str]) -> list[dict[
         for definition in get_tool_definitions()
         if definition.name in selected
     ]
-

@@ -83,7 +83,9 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.chat.calls[0]["model"] == "minimax/minimax-m2.7"
     assert instance.chat.calls[0]["modalities"] == ["image", "text"]
     assert instance.chat.calls[0]["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
-    assert instance.chat.calls[0]["plugins"] == [{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}]
+    assert instance.chat.calls[0]["plugins"] == [
+        {"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}
+    ]
     assert instance.chat.calls[0]["tools"] == [{"type": "openrouter:web_search"}]
     assert instance.chat.calls[0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert instance.chat.calls[0]["reasoning"] == {"effort": "high"}
@@ -429,7 +431,9 @@ def test_get_video_generation_and_download_file_bytes(monkeypatch):
                     {
                         "id": "job-123",
                         "status": "completed",
-                        "unsigned_urls": ["https://openrouter.ai/api/v1/videos/job-123/content?index=0"],
+                        "unsigned_urls": [
+                            "https://openrouter.ai/api/v1/videos/job-123/content?index=0"
+                        ],
                     },
                 )
             return _FakeHttpResponse(

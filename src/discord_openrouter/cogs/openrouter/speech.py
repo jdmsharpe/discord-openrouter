@@ -7,8 +7,14 @@ import httpx
 from discord import ApplicationContext, Attachment, Colour, Embed, File
 
 from ...config import OPENROUTER_DEFAULT_STT_MODEL, OPENROUTER_DEFAULT_TTS_MODEL, SHOW_COST_EMBEDS
-from ...util import calculate_cost, extract_message_text, extract_usage, sanitize_assistant_message, truncate_text
-from .attachments import AttachmentInputError, MAX_ATTACHMENT_SIZE, build_user_content
+from ...util import (
+    calculate_cost,
+    extract_message_text,
+    extract_usage,
+    sanitize_assistant_message,
+    truncate_text,
+)
+from .attachments import MAX_ATTACHMENT_SIZE, AttachmentInputError, build_user_content
 from .client import OpenRouterApiError
 from .embeds import append_flat_pricing_embed, error_embed
 from .state import track_daily_cost
@@ -101,7 +107,9 @@ async def run_tts_command(
     request_cost = usage.cost if usage.cost is not None else calculate_cost(model_info, usage)
     daily_cost = track_daily_cost(cog, ctx.author.id, request_cost)
     transcript = _resolve_transcript(response_payload)
-    actual_model = response_payload.get("model") or (model_info.id if model_info is not None else resolved_model)
+    actual_model = response_payload.get("model") or (
+        model_info.id if model_info is not None else resolved_model
+    )
 
     cog.logger.info(
         "COST | command=tts | user=%s | model=%s | chars=%s | prompt_tokens=%s"
@@ -119,11 +127,7 @@ async def run_tts_command(
         f"**Text:** {truncate_text(input_text, 1500)}\n"
         f"**Model:** `{actual_model}`\n"
         f"**Voice:** {normalized_voice or 'model/provider default'}\n"
-        + (
-            f"**Instructions:** {truncate_text(instructions, 500)}\n"
-            if instructions
-            else ""
-        )
+        + (f"**Instructions:** {truncate_text(instructions, 500)}\n" if instructions else "")
         + f"**Response Format:** {response_format}\n"
         + (f"**Transcript:** {truncate_text(transcript, 500)}\n" if transcript else "")
     )
@@ -217,7 +221,9 @@ async def run_stt_command(
         return
     except Exception as error:
         cog.logger.error("Failed to normalize STT attachment: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed("Failed to process the provided audio attachment."))
+        await ctx.followup.send(
+            embed=error_embed("Failed to process the provided audio attachment.")
+        )
         return
 
     user_content = build_user_content(_build_stt_prompt(instructions), attachment_parts)
@@ -237,9 +243,11 @@ async def run_stt_command(
         await ctx.followup.send(embed=error_embed(str(error)))
         return
 
-    choice = ((response_payload.get("choices") or [None])[0])
+    choice = (response_payload.get("choices") or [None])[0]
     if not isinstance(choice, dict):
-        await ctx.followup.send(embed=error_embed("OpenRouter returned no choices for this STT request."))
+        await ctx.followup.send(
+            embed=error_embed("OpenRouter returned no choices for this STT request.")
+        )
         return
 
     message_payload = choice.get("message") or {}
@@ -276,11 +284,7 @@ async def run_stt_command(
     description = (
         f"**Attachment:** {attachment.filename}\n"
         f"**Model:** `{model_info.id if model_info is not None else resolved_model}`\n"
-        + (
-            f"**Instructions:** {truncate_text(instructions, 500)}\n"
-            if instructions
-            else ""
-        )
+        + (f"**Instructions:** {truncate_text(instructions, 500)}\n" if instructions else "")
         + f"**Transcript:**\n{truncate_text(transcript, 3000)}"
     )
     embeds = [

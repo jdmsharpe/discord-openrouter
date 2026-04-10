@@ -7,8 +7,8 @@ from discord_openrouter.cogs.openrouter.chat import (
     _append_image_embeds,
     _build_request_plugins,
     _build_request_tools,
-    _validate_prompt_cache_request,
     _validate_model_input_modalities,
+    _validate_prompt_cache_request,
 )
 from discord_openrouter.util import ModelInfo
 
@@ -58,14 +58,11 @@ def test_build_request_plugins_adds_pdf_parser_for_pdf_turns():
         {"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}},
         {"id": "web", "enabled": False},
     ]
-    assert (
-        _build_request_plugins(
-            attachment_requirements=AttachmentRequirements(has_pdf=False),
-            pdf_engine="cloudflare-ai",
-            context_compression=None,
-        )
-        == [{"id": "web", "enabled": False}]
-    )
+    assert _build_request_plugins(
+        attachment_requirements=AttachmentRequirements(has_pdf=False),
+        pdf_engine="cloudflare-ai",
+        context_compression=None,
+    ) == [{"id": "web", "enabled": False}]
 
 
 def test_build_request_plugins_disables_deprecated_web_plugin_even_when_web_search_is_enabled():
@@ -120,7 +117,10 @@ def test_build_request_tools_can_include_multiple_openrouter_server_tools():
 
 
 def test_validate_prompt_cache_request_limits_explicit_cache_control_to_anthropic():
-    assert _validate_prompt_cache_request(model="anthropic/claude-sonnet-4.5", prompt_cache_ttl="1h") is None
+    assert (
+        _validate_prompt_cache_request(model="anthropic/claude-sonnet-4.5", prompt_cache_ttl="1h")
+        is None
+    )
 
     error = _validate_prompt_cache_request(model="openai/gpt-5.2", prompt_cache_ttl="1h")
 
