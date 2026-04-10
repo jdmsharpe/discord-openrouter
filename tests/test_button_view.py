@@ -55,8 +55,10 @@ class TestButtonView:
 
         interaction = MagicMock()
         interaction.user.id = 123
+        interaction.data = {"values": ["datetime"]}
         interaction.response.send_message = AsyncMock()
-        tool_select._values = ["datetime"]
+        tool_select.refresh_state({"values": ["datetime"]})
+        tool_select._interaction = interaction
 
         asyncio.run(tool_select.callback(interaction))
 
