@@ -1,9 +1,12 @@
 from discord.commands import OptionChoice
 
 REASONING_EFFORT_CHOICES = [
+    OptionChoice(name="Minimal", value="minimal"),
     OptionChoice(name="Low", value="low"),
     OptionChoice(name="Medium", value="medium"),
     OptionChoice(name="High", value="high"),
+    OptionChoice(name="Extra High", value="xhigh"),
+    OptionChoice(name="None", value="none"),
 ]
 
 MODEL_SCOPE_CHOICES = [
@@ -49,6 +52,17 @@ MODEL_OUTPUT_MODALITY_CHOICES = [
     OptionChoice(name="Image Output", value="image"),
     OptionChoice(name="Audio Output", value="audio"),
     OptionChoice(name="Embeddings Output", value="embeddings"),
+]
+
+PDF_ENGINE_CHOICES = [
+    OptionChoice(name="Cloudflare AI", value="cloudflare-ai"),
+    OptionChoice(name="Mistral OCR", value="mistral-ocr"),
+    OptionChoice(name="Native", value="native"),
+]
+
+PROMPT_CACHE_TTL_CHOICES = [
+    OptionChoice(name="5 Minutes", value="5m"),
+    OptionChoice(name="1 Hour", value="1h"),
 ]
 
 TTS_FORMAT_CHOICES = [

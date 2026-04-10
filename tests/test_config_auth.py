@@ -57,6 +57,8 @@ def test_default_model_and_cache_ttl_are_applied(monkeypatch):
     monkeypatch.delenv("OPENROUTER_DEFAULT_IMAGE_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_TTS_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_STT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_DEFAULT_PDF_ENGINE", raising=False)
+    monkeypatch.delenv("OPENROUTER_APP_CATEGORIES", raising=False)
     monkeypatch.delenv("OPENROUTER_DEFAULT_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_TTS_MODEL", raising=False)
@@ -68,6 +70,8 @@ def test_default_model_and_cache_ttl_are_applied(monkeypatch):
     assert auth.OPENROUTER_DEFAULT_IMAGE_MODEL == auth.DEFAULT_IMAGE_MODEL
     assert auth.OPENROUTER_DEFAULT_TTS_MODEL == auth.DEFAULT_TTS_MODEL
     assert auth.OPENROUTER_DEFAULT_STT_MODEL == auth.DEFAULT_STT_MODEL
+    assert auth.OPENROUTER_DEFAULT_PDF_ENGINE == auth.DEFAULT_PDF_ENGINE
+    assert auth.OPENROUTER_APP_CATEGORIES is None
     assert auth.OPENROUTER_DEFAULT_MODEL == auth.DEFAULT_TEXT_MODEL
     assert auth.OPENROUTER_IMAGE_MODEL == auth.DEFAULT_IMAGE_MODEL
     assert auth.OPENROUTER_TTS_MODEL == auth.DEFAULT_TTS_MODEL
@@ -87,3 +91,26 @@ def test_legacy_model_env_vars_fallback_to_new_names(monkeypatch):
     assert auth.OPENROUTER_DEFAULT_TEXT_MODEL == "legacy/text-model"
     assert auth.OPENROUTER_DEFAULT_IMAGE_MODEL == "legacy/image-model"
     assert auth.OPENROUTER_DEFAULT_TTS_MODEL == "legacy/tts-model"
+
+
+def test_pdf_engine_env_normalizes_deprecated_alias(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_DEFAULT_PDF_ENGINE", "pdf-text")
+
+    auth = _import_fresh_auth_module(monkeypatch)
+
+    assert auth.OPENROUTER_DEFAULT_PDF_ENGINE == "cloudflare-ai"
+
+
+def test_invalid_pdf_engine_env_raises_clear_error(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_DEFAULT_PDF_ENGINE", "unsupported-engine")
+
+    with pytest.raises(RuntimeError, match="Invalid OPENROUTER_DEFAULT_PDF_ENGINE value"):
+        _import_fresh_auth_module(monkeypatch)
+
+
+def test_app_categories_env_is_normalized_as_csv(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_APP_CATEGORIES", " productivity, discord bots , ai ")
+
+    auth = _import_fresh_auth_module(monkeypatch)
+
+    assert auth.OPENROUTER_APP_CATEGORIES == "productivity,discord bots,ai"

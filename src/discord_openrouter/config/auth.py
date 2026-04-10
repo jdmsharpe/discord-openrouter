@@ -1,5 +1,7 @@
 import os
 
+from ..util import normalize_pdf_engine
+
 try:
     from dotenv import load_dotenv
 except ModuleNotFoundError:  # pragma: no cover - fallback for minimal test environments
@@ -14,6 +16,7 @@ DEFAULT_TEXT_MODEL = "minimax/minimax-m2.7"
 DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview"
 DEFAULT_TTS_MODEL = "openai/gpt-audio"
 DEFAULT_STT_MODEL = "openai/gpt-audio"
+DEFAULT_PDF_ENGINE = None
 DEFAULT_MODEL = DEFAULT_TEXT_MODEL
 DEFAULT_APP_NAME = "discord-openrouter"
 DEFAULT_MODEL_CACHE_TTL_SECONDS = 300
@@ -60,6 +63,22 @@ def _parse_int_env(name: str, default: int) -> int:
         raise RuntimeError(f"Invalid {name} value. Expected an integer, got {raw_value!r}.") from exc
 
 
+def _parse_pdf_engine_env(name: str) -> str | None:
+    raw_value = _get_env_or_none(name)
+    try:
+        return normalize_pdf_engine(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid {name} value. {exc}") from exc
+
+
+def _parse_csv_header_env(name: str) -> str | None:
+    raw_value = _get_env_or_none(name)
+    if raw_value is None:
+        return None
+    values = [token.strip() for token in raw_value.split(",") if token.strip()]
+    return ",".join(values) or None
+
+
 def validate_required_config() -> None:
     missing_vars = [name for name in REQUIRED_ENV_VARS if _get_env_or_none(name) is None]
     if missing_vars:
@@ -89,11 +108,13 @@ OPENROUTER_DEFAULT_TTS_MODEL = (
     or DEFAULT_TTS_MODEL
 )
 OPENROUTER_DEFAULT_STT_MODEL = _get_env_or_none("OPENROUTER_DEFAULT_STT_MODEL") or DEFAULT_STT_MODEL
+OPENROUTER_DEFAULT_PDF_ENGINE = _parse_pdf_engine_env("OPENROUTER_DEFAULT_PDF_ENGINE")
 OPENROUTER_DEFAULT_MODEL = OPENROUTER_DEFAULT_TEXT_MODEL
 OPENROUTER_IMAGE_MODEL = OPENROUTER_DEFAULT_IMAGE_MODEL
 OPENROUTER_TTS_MODEL = OPENROUTER_DEFAULT_TTS_MODEL
 OPENROUTER_SITE_URL = _get_env_or_none("OPENROUTER_SITE_URL")
 OPENROUTER_APP_NAME = _get_env_or_none("OPENROUTER_APP_NAME") or DEFAULT_APP_NAME
+OPENROUTER_APP_CATEGORIES = _parse_csv_header_env("OPENROUTER_APP_CATEGORIES")
 OPENROUTER_MODEL_CACHE_TTL_SECONDS = _parse_int_env(
     "OPENROUTER_MODEL_CACHE_TTL_SECONDS",
     DEFAULT_MODEL_CACHE_TTL_SECONDS,

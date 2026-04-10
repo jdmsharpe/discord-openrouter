@@ -63,6 +63,8 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
             messages=[{"role": "user", "content": "hello"}],
             modalities=["image", "text"],
             image_config={"aspect_ratio": "16:9", "image_size": "2K"},
+            plugins=[{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}],
+            cache_control={"type": "ephemeral", "ttl": "1h"},
             temperature=0.5,
             top_p=0.9,
             max_tokens=256,
@@ -79,8 +81,74 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.chat.calls[0]["model"] == "minimax/minimax-m2.7"
     assert instance.chat.calls[0]["modalities"] == ["image", "text"]
     assert instance.chat.calls[0]["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
+    assert instance.chat.calls[0]["plugins"] == [{"id": "file-parser", "pdf": {"engine": "cloudflare-ai"}}]
+    assert instance.chat.calls[0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert instance.chat.calls[0]["reasoning"] == {"effort": "high"}
     assert payload["usage"]["total_tokens"] == 30
+
+
+def test_create_chat_completion_supports_reasoning_budget_and_exclusion(monkeypatch):
+    client = OpenRouterClient(api_key="test-key")
+    monkeypatch.setattr(
+        client,
+        "_import_openrouter_sdk",
+        lambda: SimpleNamespace(OpenRouter=_FakeOpenRouter),
+    )
+
+    asyncio.run(
+        client.create_chat_completion(
+            model="anthropic/claude-sonnet-4.5",
+            messages=[{"role": "user", "content": "hello"}],
+            reasoning_max_tokens=2048,
+            exclude_reasoning=True,
+        )
+    )
+
+    instance = _FakeOpenRouter.instances[-1]
+    assert instance.chat.calls[0]["reasoning"] == {
+        "max_tokens": 2048,
+        "exclude": True,
+    }
+
+
+def test_create_chat_completion_can_request_hidden_reasoning_only(monkeypatch):
+    client = OpenRouterClient(api_key="test-key")
+    monkeypatch.setattr(
+        client,
+        "_import_openrouter_sdk",
+        lambda: SimpleNamespace(OpenRouter=_FakeOpenRouter),
+    )
+
+    asyncio.run(
+        client.create_chat_completion(
+            model="openai/gpt-5.2",
+            messages=[{"role": "user", "content": "hello"}],
+            exclude_reasoning=True,
+        )
+    )
+
+    instance = _FakeOpenRouter.instances[-1]
+    assert instance.chat.calls[0]["reasoning"] == {
+        "exclude": True,
+        "enabled": True,
+    }
+
+
+def test_request_headers_use_documented_openrouter_names():
+    client = OpenRouterClient(
+        api_key="test-key",
+        site_url="https://example.com",
+        app_name="discord-openrouter",
+        app_categories="productivity,discord bots",
+    )
+
+    headers = client._request_headers()
+
+    assert headers["Authorization"] == "Bearer test-key"
+    assert headers["HTTP-Referer"] == "https://example.com"
+    assert headers["X-OpenRouter-Title"] == "discord-openrouter"
+    assert headers["X-OpenRouter-Categories"] == "productivity,discord bots"
+    assert "X-Title" not in headers
 
 
 def test_list_models_uses_cache_and_filters(monkeypatch):

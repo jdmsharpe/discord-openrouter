@@ -34,6 +34,26 @@ def append_reasoning_embeds(embeds: list[Embed], reasoning_text: str) -> None:
         )
 
 
+def append_citations_embed(embeds: list[Embed], citations: list[dict[str, str]]) -> None:
+    if not citations:
+        return
+
+    lines = [
+        f"{index}. [{citation['title']}]({citation['url']})"
+        for index, citation in enumerate(citations[:10], start=1)
+    ]
+    if not lines:
+        return
+
+    embeds.append(
+        Embed(
+            title="Sources",
+            description=truncate_text("\n".join(lines), 4000),
+            color=Colour.blue(),
+        )
+    )
+
+
 def append_usage_embed(
     embeds: list[Embed],
     *,
@@ -46,16 +66,38 @@ def append_usage_embed(
         parts.append(f"${request_cost:.4f}")
 
     in_part = f"{usage.prompt_tokens:,} tokens in"
+    in_details: list[str] = []
     if usage.cached_tokens:
-        in_part += f" ({usage.cached_tokens:,} cached)"
+        in_details.append(f"{usage.cached_tokens:,} cached")
+    if usage.cache_write_tokens:
+        in_details.append(f"{usage.cache_write_tokens:,} cache write")
+    if usage.input_audio_tokens:
+        in_details.append(f"{usage.input_audio_tokens:,} audio")
+    if usage.input_video_tokens:
+        in_details.append(f"{usage.input_video_tokens:,} video")
+    if in_details:
+        in_part += f" ({', '.join(in_details)})"
 
     out_part = f"{usage.completion_tokens:,} tokens out"
+    out_details: list[str] = []
     if usage.reasoning_tokens:
-        out_part += f" ({usage.reasoning_tokens:,} reasoning)"
+        out_details.append(f"{usage.reasoning_tokens:,} reasoning")
+    if usage.output_audio_tokens:
+        out_details.append(f"{usage.output_audio_tokens:,} audio")
+    if usage.output_image_tokens:
+        out_details.append(f"{usage.output_image_tokens:,} image")
+    if out_details:
+        out_part += f" ({', '.join(out_details)})"
     parts.append(f"{in_part} / {out_part}")
 
     if daily_cost is not None:
         parts.append(f"daily ${daily_cost:.2f}")
+    web_search_requests = usage.server_tool_use.get("web_search_requests") or usage.server_tool_use.get(
+        "web_search"
+    )
+    if web_search_requests:
+        suffix = "es" if web_search_requests != 1 else ""
+        parts.append(f"{web_search_requests} search{suffix}")
 
     embeds.append(Embed(description=" · ".join(parts), color=Colour.blue()))
 
@@ -130,6 +172,7 @@ def build_model_list_embed(
 def build_current_model_embed(
     *,
     active_model: str | None,
+    active_options: str | None,
     channel_default: str | None,
     global_default: str,
 ) -> Embed:
@@ -138,6 +181,8 @@ def build_current_model_embed(
         f"**Channel default:** `{channel_default or 'none'}`",
         f"**Global fallback:** `{global_default}`",
     ]
+    if active_options:
+        lines.append(f"**Active options:** {active_options}")
     return Embed(
         title="Current Model State",
         description="\n".join(lines),

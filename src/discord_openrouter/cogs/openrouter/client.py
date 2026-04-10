@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from ...config import (
     OPENROUTER_API_KEY,
+    OPENROUTER_APP_CATEGORIES,
     OPENROUTER_APP_NAME,
     OPENROUTER_MODEL_CACHE_TTL_SECONDS,
     OPENROUTER_SITE_URL,
@@ -32,11 +33,13 @@ class OpenRouterClient:
         api_key: str,
         site_url: str | None = None,
         app_name: str | None = None,
+        app_categories: str | None = None,
         model_cache_ttl_seconds: int = OPENROUTER_MODEL_CACHE_TTL_SECONDS,
     ):
         self.api_key = api_key
         self.site_url = site_url
         self.app_name = app_name
+        self.app_categories = app_categories
         self.model_cache_ttl_seconds = model_cache_ttl_seconds
         self._models_cache: list[ModelInfo] = []
         self._models_cache_expires_at = 0.0
@@ -49,10 +52,14 @@ class OpenRouterClient:
         messages: list[dict[str, Any]],
         modalities: list[str] | None = None,
         image_config: dict[str, Any] | None = None,
+        plugins: list[dict[str, Any]] | None = None,
+        cache_control: dict[str, Any] | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
+        reasoning_max_tokens: int | None = None,
+        exclude_reasoning: bool = False,
         user: str | None = None,
         session_id: str | None = None,
     ) -> dict[str, Any]:
@@ -71,14 +78,23 @@ class OpenRouterClient:
             request_kwargs["modalities"] = list(modalities)
         if image_config:
             request_kwargs["image_config"] = dict(image_config)
+        if plugins:
+            request_kwargs["plugins"] = [dict(plugin) for plugin in plugins]
+        if cache_control:
+            request_kwargs["cache_control"] = dict(cache_control)
         if temperature is not None:
             request_kwargs["temperature"] = temperature
         if top_p is not None:
             request_kwargs["top_p"] = top_p
         if max_tokens is not None:
             request_kwargs["max_tokens"] = max_tokens
-        if reasoning_effort:
-            request_kwargs["reasoning"] = {"effort": reasoning_effort}
+        reasoning_config = _build_reasoning_config(
+            reasoning_effort=reasoning_effort,
+            reasoning_max_tokens=reasoning_max_tokens,
+            exclude_reasoning=exclude_reasoning,
+        )
+        if reasoning_config is not None:
+            request_kwargs["reasoning"] = reasoning_config
         if user:
             request_kwargs["user"] = user
         if session_id:
@@ -246,7 +262,9 @@ class OpenRouterClient:
         if self.site_url:
             headers["HTTP-Referer"] = self.site_url
         if self.app_name:
-            headers["X-Title"] = self.app_name
+            headers["X-OpenRouter-Title"] = self.app_name
+        if self.app_categories:
+            headers["X-OpenRouter-Categories"] = self.app_categories
         return headers
 
     @staticmethod
@@ -347,6 +365,25 @@ def _build_tts_prompt(*, input_text: str, instructions: str | None) -> str:
     return f"{normalized_instructions}\n\nText to speak:\n{input_text}"
 
 
+def _build_reasoning_config(
+    *,
+    reasoning_effort: str | None,
+    reasoning_max_tokens: int | None,
+    exclude_reasoning: bool,
+) -> dict[str, Any] | None:
+    config: dict[str, Any] = {}
+    explicit_reasoning_control = bool(reasoning_effort) or reasoning_max_tokens is not None
+    if reasoning_effort:
+        config["effort"] = reasoning_effort
+    if reasoning_max_tokens is not None:
+        config["max_tokens"] = reasoning_max_tokens
+    if exclude_reasoning:
+        config["exclude"] = True
+        if not explicit_reasoning_control:
+            config["enabled"] = True
+    return config or None
+
+
 def _casefolded(values: list[str]) -> set[str]:
     return {value.casefold() for value in values}
 
@@ -368,5 +405,6 @@ def build_openrouter_client() -> OpenRouterClient:
         api_key=OPENROUTER_API_KEY,
         site_url=OPENROUTER_SITE_URL,
         app_name=OPENROUTER_APP_NAME,
+        app_categories=OPENROUTER_APP_CATEGORIES,
         model_cache_ttl_seconds=OPENROUTER_MODEL_CACHE_TTL_SECONDS,
     )
