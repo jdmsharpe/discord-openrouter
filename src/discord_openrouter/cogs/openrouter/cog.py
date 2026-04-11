@@ -30,6 +30,7 @@ from .client import OpenRouterApiError, build_openrouter_client
 from .command_options import (
     IMAGE_ASPECT_RATIO_CHOICES,
     IMAGE_SIZE_CHOICES,
+    MODALITY_CHOICES,
     MODEL_INPUT_MODALITY_CHOICES,
     MODEL_OUTPUT_MODALITY_CHOICES,
     MODEL_SCOPE_CHOICES,
@@ -334,7 +335,19 @@ class OpenRouterCog(commands.Cog):
         user_id = ctx.user.id
         channel_id = ctx.channel.id if ctx.channel is not None else 0
         active_conversation = find_active_conversation(self, channel_id=channel_id, user_id=user_id)
-        channel_default = self.channel_model_defaults.get((channel_id, user_id, "chat"))
+
+        channel_defaults = {
+            modality: self.channel_model_defaults[(channel_id, user_id, modality)]
+            for modality in ("chat", "image", "video", "tts", "stt")
+            if (channel_id, user_id, modality) in self.channel_model_defaults
+        }
+        global_defaults = {
+            "chat": OPENROUTER_DEFAULT_TEXT_MODEL,
+            "image": OPENROUTER_DEFAULT_IMAGE_MODEL,
+            "video": OPENROUTER_DEFAULT_VIDEO_MODEL,
+            "tts": OPENROUTER_DEFAULT_TTS_MODEL,
+            "stt": OPENROUTER_DEFAULT_STT_MODEL,
+        }
         embed = build_current_model_embed(
             active_model=active_conversation.settings.model if active_conversation else None,
             active_options=(
@@ -342,8 +355,8 @@ class OpenRouterCog(commands.Cog):
                 if active_conversation is not None
                 else None
             ),
-            channel_default=channel_default,
-            global_default=OPENROUTER_DEFAULT_TEXT_MODEL,
+            channel_defaults=channel_defaults,
+            global_defaults=global_defaults,
         )
         await ctx.respond(embed=embed)
 
@@ -359,14 +372,23 @@ class OpenRouterCog(commands.Cog):
         type=str,
         choices=MODEL_SCOPE_CHOICES,
     )
+    @option(
+        "modality",
+        description="Which modality's model to switch. (default: chat)",
+        required=False,
+        type=str,
+        choices=MODALITY_CHOICES,
+    )
     async def switch_model(
         self,
         ctx: ApplicationContext,
         model: str,
         scope: str | None = None,
+        modality: str | None = None,
     ):
         await ctx.defer()
         resolved_scope = scope or "conversation"
+        resolved_modality = modality or "chat"
         channel_id = ctx.channel.id if ctx.channel is not None else 0
         user_id = ctx.user.id
         active_conversation = find_active_conversation(self, channel_id=channel_id, user_id=user_id)
@@ -380,33 +402,38 @@ class OpenRouterCog(commands.Cog):
         resolved_model = model_info.id if model_info is not None else model.strip()
         lines = [f"**Resolved model:** `{resolved_model}`"]
 
-        if resolved_scope in {"conversation", "both"}:
-            if active_conversation is None:
-                if resolved_scope == "conversation":
-                    self.channel_model_defaults[(channel_id, user_id, "chat")] = resolved_model
-                    lines.append("**Conversation:** no active conversation to update")
-                    lines.append("**Channel default:** updated (fallback)")
-                    resolved_scope = "channel"
+        if resolved_modality == "chat":
+            if resolved_scope in {"conversation", "both"}:
+                if active_conversation is None:
+                    if resolved_scope == "conversation":
+                        self.channel_model_defaults[(channel_id, user_id, "chat")] = resolved_model
+                        lines.append("**Conversation:** no active conversation to update")
+                        lines.append("**Channel default:** updated (fallback)")
+                        resolved_scope = "channel"
+                    else:
+                        lines.append("**Conversation:** no active conversation to update")
                 else:
-                    lines.append("**Conversation:** no active conversation to update")
-            else:
-                active_conversation.settings.model = resolved_model
-                if (
-                    active_conversation.settings.prompt_cache_ttl
-                    and not prompt_cache_supported_for_model(resolved_model)
-                ):
-                    active_conversation.settings.prompt_cache_ttl = None
-                    lines.append("**Prompt cache:** cleared (not supported by the new model)")
-                active_conversation.touch()
-                lines.append("**Conversation:** updated")
-                active_options = describe_chat_settings(active_conversation.settings)
-                if active_options:
-                    lines.append(f"**Active options:** {active_options}")
+                    active_conversation.settings.model = resolved_model
+                    if (
+                        active_conversation.settings.prompt_cache_ttl
+                        and not prompt_cache_supported_for_model(resolved_model)
+                    ):
+                        active_conversation.settings.prompt_cache_ttl = None
+                        lines.append("**Prompt cache:** cleared (not supported by the new model)")
+                    active_conversation.touch()
+                    lines.append("**Conversation:** updated")
+                    active_options = describe_chat_settings(active_conversation.settings)
+                    if active_options:
+                        lines.append(f"**Active options:** {active_options}")
 
-        if resolved_scope in {"channel", "both"} and (
-            "**Channel default:** updated (fallback)" not in lines
-        ):
-            self.channel_model_defaults[(channel_id, user_id, "chat")] = resolved_model
+            if resolved_scope in {"channel", "both"} and (
+                "**Channel default:** updated (fallback)" not in lines
+            ):
+                self.channel_model_defaults[(channel_id, user_id, "chat")] = resolved_model
+                lines.append("**Channel default:** updated")
+        else:
+            # non-chat modalities: scope is always channel (silently downgraded)
+            self.channel_model_defaults[(channel_id, user_id, resolved_modality)] = resolved_model
             lines.append("**Channel default:** updated")
 
         if model_info is None:
