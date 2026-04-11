@@ -114,3 +114,17 @@ def test_modality_choices_covers_all_expected_modalities():
 
     values = {choice.value for choice in MODALITY_CHOICES}
     assert values == {"chat", "image", "video", "tts", "stt"}
+
+
+def test_channel_model_defaults_uses_modality_as_third_key():
+    from discord_openrouter.cogs.openrouter.state import ModalityModelStore
+
+    store: ModalityModelStore = {}
+    channel_id, user_id = 100, 42
+
+    store[(channel_id, user_id, "chat")] = "openai/gpt-4o"
+    store[(channel_id, user_id, "image")] = "openai/dall-e-3"
+
+    assert store.get((channel_id, user_id, "chat")) == "openai/gpt-4o"
+    assert store.get((channel_id, user_id, "image")) == "openai/dall-e-3"
+    assert store.get((channel_id, user_id, "video")) is None

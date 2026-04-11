@@ -499,7 +499,7 @@ async def _resolve_model_for_request(
     channel_id: int,
     user_id: int,
 ):
-    channel_default = cog.channel_model_defaults.get((channel_id, user_id))
+    channel_default = cog.channel_model_defaults.get((channel_id, user_id, "chat"))
     raw_model = (requested_model or channel_default or OPENROUTER_DEFAULT_TEXT_MODEL).strip()
     model_info = await cog.openrouter_client.get_model(raw_model)
     if model_info is not None:
