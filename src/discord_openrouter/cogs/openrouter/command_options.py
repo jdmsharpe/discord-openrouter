@@ -15,6 +15,14 @@ MODEL_SCOPE_CHOICES = [
     OptionChoice(name="Both conversation and channel", value="both"),
 ]
 
+MODALITY_CHOICES = [
+    OptionChoice(name="Chat", value="chat"),
+    OptionChoice(name="Image", value="image"),
+    OptionChoice(name="Video", value="video"),
+    OptionChoice(name="TTS", value="tts"),
+    OptionChoice(name="STT", value="stt"),
+]
+
 IMAGE_ASPECT_RATIO_CHOICES = [
     OptionChoice(name="1:1 (Square)", value="1:1"),
     OptionChoice(name="1:4", value="1:4"),
