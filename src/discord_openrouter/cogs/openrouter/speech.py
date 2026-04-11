@@ -57,7 +57,12 @@ async def run_tts_command(
         )
         return
 
-    resolved_model = (model or OPENROUTER_DEFAULT_TTS_MODEL).strip()
+    channel_id = ctx.channel.id if ctx.channel is not None else 0
+    resolved_model = (
+        model
+        or cog.channel_model_defaults.get((channel_id, ctx.author.id, "tts"))
+        or OPENROUTER_DEFAULT_TTS_MODEL
+    ).strip()
     if not resolved_model:
         await ctx.followup.send(embed=error_embed("No TTS model is configured for this bot."))
         return
@@ -188,7 +193,12 @@ async def run_stt_command(
         )
         return
 
-    resolved_model = (model or OPENROUTER_DEFAULT_STT_MODEL).strip()
+    channel_id = ctx.channel.id if ctx.channel is not None else 0
+    resolved_model = (
+        model
+        or cog.channel_model_defaults.get((channel_id, ctx.author.id, "stt"))
+        or OPENROUTER_DEFAULT_STT_MODEL
+    ).strip()
     if not resolved_model:
         await ctx.followup.send(embed=error_embed("No STT model is configured for this bot."))
         return
