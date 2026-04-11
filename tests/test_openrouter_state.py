@@ -107,3 +107,10 @@ def test_handle_tools_changed_ignores_unknown_values_and_disables_unselected_too
     assert active_names == set()
     assert conversation.settings.web_search is False
     assert conversation.settings.datetime is False
+
+
+def test_modality_choices_covers_all_expected_modalities():
+    from discord_openrouter.cogs.openrouter.command_options import MODALITY_CHOICES
+
+    values = {choice.value for choice in MODALITY_CHOICES}
+    assert values == {"chat", "image", "video", "tts", "stt"}

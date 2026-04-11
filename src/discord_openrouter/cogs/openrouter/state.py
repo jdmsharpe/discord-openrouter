@@ -15,6 +15,8 @@ ConversationStore: TypeAlias = dict[ConversationId, Conversation]
 ViewStore: TypeAlias = dict[ConversationId, tuple[UserId, ButtonView, datetime]]
 ViewMessageStore: TypeAlias = dict[ConversationId, tuple[UserId, Message, datetime]]
 DailyCostStore: TypeAlias = dict[tuple[UserId, str], tuple[float, datetime]]
+Modality: TypeAlias = str  # "chat" | "image" | "video" | "tts" | "stt"
+ModalityModelStore: TypeAlias = dict[tuple[int, int, Modality], str]
 
 MAX_ACTIVE_CONVERSATIONS = 100
 MAX_VIEW_STATES = 200
