@@ -341,7 +341,7 @@ class OpenRouterCog(commands.Cog):
             for modality in ("chat", "image", "video", "tts", "stt")
             if (channel_id, user_id, modality) in self.channel_model_defaults
         }
-        global_defaults = {
+        global_defaults: dict[str, str | None] = {
             "chat": OPENROUTER_DEFAULT_TEXT_MODEL,
             "image": OPENROUTER_DEFAULT_IMAGE_MODEL,
             "video": OPENROUTER_DEFAULT_VIDEO_MODEL,
