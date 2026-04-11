@@ -49,6 +49,7 @@ from .embeds import (
 from .image import run_image_command
 from .speech import run_stt_command, run_tts_command
 from .state import (
+    ModalityModelStore,
     cleanup_conversation,
     create_button_view,
     find_active_conversation,
@@ -70,7 +71,7 @@ class OpenRouterCog(commands.Cog):
         self.views = {}
         self.last_view_messages = {}
         self.daily_costs = {}
-        self.channel_model_defaults: dict[tuple[int, int], str] = {}
+        self.channel_model_defaults: ModalityModelStore = {}
 
     def cog_unload(self):
         if self._runtime_cleanup_task.is_running():
@@ -333,7 +334,7 @@ class OpenRouterCog(commands.Cog):
         user_id = ctx.user.id
         channel_id = ctx.channel.id if ctx.channel is not None else 0
         active_conversation = find_active_conversation(self, channel_id=channel_id, user_id=user_id)
-        channel_default = self.channel_model_defaults.get((channel_id, user_id))
+        channel_default = self.channel_model_defaults.get((channel_id, user_id, "chat"))
         embed = build_current_model_embed(
             active_model=active_conversation.settings.model if active_conversation else None,
             active_options=(
@@ -382,7 +383,7 @@ class OpenRouterCog(commands.Cog):
         if resolved_scope in {"conversation", "both"}:
             if active_conversation is None:
                 if resolved_scope == "conversation":
-                    self.channel_model_defaults[(channel_id, user_id)] = resolved_model
+                    self.channel_model_defaults[(channel_id, user_id, "chat")] = resolved_model
                     lines.append("**Conversation:** no active conversation to update")
                     lines.append("**Channel default:** updated (fallback)")
                     resolved_scope = "channel"
@@ -405,7 +406,7 @@ class OpenRouterCog(commands.Cog):
         if resolved_scope in {"channel", "both"} and (
             "**Channel default:** updated (fallback)" not in lines
         ):
-            self.channel_model_defaults[(channel_id, user_id)] = resolved_model
+            self.channel_model_defaults[(channel_id, user_id, "chat")] = resolved_model
             lines.append("**Channel default:** updated")
 
         if model_info is None:
