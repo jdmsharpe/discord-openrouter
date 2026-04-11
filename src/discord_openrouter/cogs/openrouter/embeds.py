@@ -229,22 +229,40 @@ def build_model_list_embed(
     )
 
 
+_MODALITY_LABELS: dict[str, str] = {
+    "chat": "Chat",
+    "image": "Image",
+    "video": "Video",
+    "tts": "TTS",
+    "stt": "STT",
+}
+_MODALITY_ORDER = ["chat", "image", "video", "tts", "stt"]
+
+
 def build_current_model_embed(
     *,
     active_model: str | None,
     active_options: str | None,
-    channel_default: str | None,
-    global_default: str,
+    channel_defaults: dict[str, str],
+    global_defaults: dict[str, str | None],
 ) -> Embed:
-    lines = [
-        f"**Active conversation:** `{active_model or 'none'}`",
-        f"**Channel default:** `{channel_default or 'none'}`",
-        f"**Global fallback:** `{global_default}`",
-    ]
-    if active_options:
-        lines.append(f"**Active options:** {active_options}")
+    sections: list[str] = []
+    for modality in _MODALITY_ORDER:
+        label = _MODALITY_LABELS[modality]
+        lines = [f"**{label}**"]
+        if modality == "chat" and active_model:
+            lines.append(f"  Active conversation: `{active_model}`")
+            if active_options:
+                lines.append(f"  Active options: {active_options}")
+        channel_default = channel_defaults.get(modality)
+        if channel_default:
+            lines.append(f"  Channel default: `{channel_default}`")
+        global_default = global_defaults.get(modality)
+        if global_default:
+            lines.append(f"  Global default: `{global_default}`")
+        sections.append("\n".join(lines))
     return Embed(
-        title="Current Model State",
-        description="\n".join(lines),
+        title="Current Model Settings",
+        description="\n\n".join(sections),
         color=Colour.blue(),
     )

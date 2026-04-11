@@ -162,3 +162,74 @@ def test_append_flat_pricing_embed_prefixes_estimated_request_cost():
     assert len(embeds) == 1
     description = embeds[0].description
     assert description == "est. <$0.01 · video generation · daily $1.51"
+
+
+def test_build_current_model_embed_shows_all_modalities_with_no_channel_defaults():
+    from discord_openrouter.cogs.openrouter.embeds import build_current_model_embed
+
+    embed = build_current_model_embed(
+        active_model=None,
+        active_options=None,
+        channel_defaults={},
+        global_defaults={
+            "chat": "openai/gpt-4o-mini",
+            "image": "openai/dall-e-3",
+            "video": "runway/gen3",
+            "tts": "openai/tts-1",
+            "stt": "openai/whisper-1",
+        },
+    )
+
+    desc = embed.description or ""
+    assert "Chat" in desc
+    assert "Image" in desc
+    assert "Video" in desc
+    assert "TTS" in desc
+    assert "STT" in desc
+    # No channel defaults set — "Channel default" line should not appear
+    assert "Channel default" not in desc
+    assert "openai/gpt-4o-mini" in desc
+    assert "openai/dall-e-3" in desc
+
+
+def test_build_current_model_embed_shows_channel_default_only_when_set():
+    from discord_openrouter.cogs.openrouter.embeds import build_current_model_embed
+
+    embed = build_current_model_embed(
+        active_model="anthropic/claude-sonnet-4-5",
+        active_options="web search",
+        channel_defaults={"chat": "openai/gpt-4o", "image": "black-forest-labs/flux-1"},
+        global_defaults={
+            "chat": "openai/gpt-4o-mini",
+            "image": "openai/dall-e-3",
+            "video": "runway/gen3",
+            "tts": "openai/tts-1",
+            "stt": "openai/whisper-1",
+        },
+    )
+
+    desc = embed.description or ""
+    # Chat has active conversation + channel default
+    assert "anthropic/claude-sonnet-4-5" in desc
+    assert "web search" in desc
+    assert "openai/gpt-4o" in desc
+    # Image has channel default
+    assert "black-forest-labs/flux-1" in desc
+    # Video/TTS/STT have no channel default
+    assert "runway/gen3" in desc
+    # Channel default line appears exactly twice (chat and image)
+    assert desc.count("Channel default") == 2
+
+
+def test_build_current_model_embed_omits_active_conversation_line_when_no_active_conversation():
+    from discord_openrouter.cogs.openrouter.embeds import build_current_model_embed
+
+    embed = build_current_model_embed(
+        active_model=None,
+        active_options=None,
+        channel_defaults={},
+        global_defaults={"chat": "openai/gpt-4o-mini", "image": None, "video": None, "tts": None, "stt": None},
+    )
+
+    desc = embed.description or ""
+    assert "Active conversation" not in desc
