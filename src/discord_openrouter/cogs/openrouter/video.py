@@ -35,7 +35,12 @@ async def run_video_command(
 ) -> None:
     await ctx.defer()
 
-    resolved_model = (model or OPENROUTER_DEFAULT_VIDEO_MODEL).strip()
+    channel_id = ctx.channel.id if ctx.channel is not None else 0
+    resolved_model = (
+        model
+        or cog.channel_model_defaults.get((channel_id, ctx.author.id, "video"))
+        or OPENROUTER_DEFAULT_VIDEO_MODEL
+    ).strip()
     if not resolved_model:
         await ctx.followup.send(embed=error_embed("No video model is configured for this bot."))
         return
