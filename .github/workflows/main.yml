@@ -51,14 +51,14 @@ jobs:
           load: true
           context: .
           file: ./Dockerfile.test
-          tags: discord-openrouter-bot-test:latest
+          tags: discord-openrouter-test:latest
           build-args: |
             PYTHON_VERSION=3.13
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Run Docker container to execute tests
-        run: docker run --rm discord-openrouter-bot-test:latest
+        run: docker run --rm discord-openrouter-test:latest
 
   release-image:
     name: Build and push release image
@@ -82,7 +82,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKER_HUB_USERNAME }}/discord-openrouter-bot
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/discord-openrouter
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
