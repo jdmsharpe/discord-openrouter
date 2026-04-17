@@ -8,7 +8,7 @@
 
 ## Overview
 
-A Discord bot built on Pycord 2.0 that integrates OpenRouter through the official OpenRouter Python SDK, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. All functionality is cleanly grouped under the `/openrouter` namespace, supporting image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread.
+A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. All functionality is cleanly grouped under the `/openrouter` namespace, supporting image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread.
 
 ## Features
 
