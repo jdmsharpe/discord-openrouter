@@ -116,7 +116,7 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `minimax/minimax-m2.7`) |
 | `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter image` (Default: `google/gemini-3.1-flash-image-preview`) |
-| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter video` (Default: `google/veo-3.1`) |
+| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter video` (Default: `bytedance/seedance-2.0`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter tts` (Default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter stt` (Default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default engine for PDF attachments: `cloudflare-ai`, `mistral-ocr`, `native` |
@@ -125,6 +125,7 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_APP_CATEGORIES` | No | Optional categories sent as `X-OpenRouter-Categories` |
 | `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | Seconds to cache model metadata (Default: `300`) |
 | `SHOW_COST_EMBEDS` | No | Show usage/cost embeds (Default: `true`) |
+| `LOG_FORMAT` | No | `text` (default) for human-readable logs, or `json` for structured JSON-lines output with per-request IDs |
 
 ### Running the Bot
 

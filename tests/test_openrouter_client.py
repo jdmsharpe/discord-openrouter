@@ -1,9 +1,9 @@
 import asyncio
 import base64
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from discord_openrouter.cogs.openrouter import client as client_module
 from discord_openrouter.cogs.openrouter.client import OpenRouterClient, _collect_audio_stream
 from discord_openrouter.util import ModelInfo, ModelPricing
 
@@ -244,8 +244,8 @@ def test_fetch_models_fallback_requests_all_modalities(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def get(self, url, *, headers=None, params=None):
-            self.calls.append({"url": url, "headers": headers, "params": params})
+        async def request(self, method, url, *, headers=None, params=None, json=None):
+            self.calls.append({"method": method, "url": url, "headers": headers, "params": params})
             if url.endswith("/models/user"):
                 return _FakeHttpResponse(404, {"error": {"message": "not found"}})
             return _FakeHttpResponse(
@@ -265,7 +265,12 @@ def test_fetch_models_fallback_requests_all_modalities(monkeypatch):
                 },
             )
 
-    monkeypatch.setitem(sys.modules, "httpx", SimpleNamespace(AsyncClient=_FakeAsyncClient))
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
+    )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
 
     client = OpenRouterClient(api_key="test-key")
     models = asyncio.run(client._fetch_models_from_api())
@@ -319,6 +324,85 @@ def test_collect_audio_stream_assembles_audio_usage_and_transcript():
     assert result["usage"]["cost"] == 0.0012
 
 
+def test_request_with_retries_retries_on_5xx_then_succeeds(monkeypatch):
+    from discord_openrouter.cogs.openrouter.client import _request_with_retries
+
+    call_count = {"n": 0}
+
+    class _FakeHttpResponse:
+        def __init__(self, status_code):
+            self.status_code = status_code
+            self.headers: dict[str, str] = {}
+
+    class _FakeAsyncClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def request(self, method, url, **_kwargs):
+            call_count["n"] += 1
+            if call_count["n"] < 3:
+                return _FakeHttpResponse(503)
+            return _FakeHttpResponse(200)
+
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
+    )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
+    # Skip real sleeps between retries.
+    monkeypatch.setattr(client_module.asyncio, "sleep", AsyncMock())
+
+    response = asyncio.run(_request_with_retries("GET", "https://example.com/x", timeout=5.0))
+
+    assert response.status_code == 200
+    assert call_count["n"] == 3
+
+
+def test_request_with_retries_raises_after_max_attempts(monkeypatch):
+    from discord_openrouter.cogs.openrouter.client import (
+        MAX_API_ATTEMPTS,
+        OpenRouterApiError,
+        _request_with_retries,
+    )
+
+    real_connect_error = client_module.httpx.ConnectError
+
+    class _FlakyAsyncClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def request(self, method, url, **_kwargs):
+            raise real_connect_error("boom")
+
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FlakyAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
+    )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
+    monkeypatch.setattr(client_module.asyncio, "sleep", AsyncMock())
+
+    import pytest
+
+    with pytest.raises(OpenRouterApiError) as exc_info:
+        asyncio.run(_request_with_retries("GET", "https://example.com/x", timeout=5.0))
+
+    assert f"{MAX_API_ATTEMPTS} attempts" in str(exc_info.value)
+
+
 def test_create_video_generation_uses_videos_endpoint(monkeypatch):
     class _FakeHttpResponse:
         def __init__(self, status_code, payload):
@@ -341,8 +425,8 @@ def test_create_video_generation_uses_videos_endpoint(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def post(self, url, *, headers=None, json=None):
-            self.calls.append({"method": "POST", "url": url, "headers": headers, "json": json})
+        async def request(self, method, url, *, headers=None, json=None, params=None):
+            self.calls.append({"method": method, "url": url, "headers": headers, "json": json})
             return _FakeHttpResponse(
                 202,
                 {
@@ -352,11 +436,12 @@ def test_create_video_generation_uses_videos_endpoint(monkeypatch):
                 },
             )
 
-    monkeypatch.setitem(
-        sys.modules,
-        "httpx",
-        SimpleNamespace(AsyncClient=_FakeAsyncClient, Timeout=lambda **_kwargs: None),
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
     )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
 
     client = OpenRouterClient(
         api_key="test-key",
@@ -423,8 +508,8 @@ def test_get_video_generation_and_download_file_bytes(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def get(self, url, *, headers=None):
-            self.calls.append({"method": "GET", "url": url, "headers": headers})
+        async def request(self, method, url, *, headers=None, params=None, json=None):
+            self.calls.append({"method": method, "url": url, "headers": headers})
             if url.endswith("/videos/job-123"):
                 return _FakeHttpResponse(
                     200,
@@ -442,11 +527,12 @@ def test_get_video_generation_and_download_file_bytes(monkeypatch):
                 headers={"Content-Type": "video/mp4"},
             )
 
-    monkeypatch.setitem(
-        sys.modules,
-        "httpx",
-        SimpleNamespace(AsyncClient=_FakeAsyncClient, Timeout=lambda **_kwargs: None),
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
     )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
 
     client = OpenRouterClient(api_key="test-key")
     status_payload = asyncio.run(client.get_video_generation(job_id="job-123"))

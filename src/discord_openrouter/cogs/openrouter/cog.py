@@ -15,6 +15,7 @@ from ...config import (
     OPENROUTER_DEFAULT_TTS_MODEL,
     OPENROUTER_DEFAULT_VIDEO_MODEL,
 )
+from ...logging_setup import bind_request_id
 from ...util import describe_chat_settings, prompt_cache_supported_for_model
 from .chat import (
     handle_check_permissions,
@@ -110,6 +111,10 @@ class OpenRouterCog(commands.Cog):
     async def _before_runtime_cleanup_task(self) -> None:
         await self.bot.wait_until_ready()
 
+    async def cog_before_invoke(self, ctx) -> None:
+        """Bind a fresh request id on every slash-command entry into this cog."""
+        bind_request_id()
+
     @commands.Cog.listener()
     async def on_ready(self):
         bot_user = self.bot.user
@@ -126,6 +131,7 @@ class OpenRouterCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        bind_request_id()
         await handle_on_message(self, message)
 
     @commands.Cog.listener()

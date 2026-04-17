@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import importlib
 import json
+import logging
+import random
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
+
+import httpx
 
 if TYPE_CHECKING:
     pass
@@ -20,6 +27,100 @@ from ...config import (
 from ...util import ModelInfo, parse_model_info
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+MAX_API_ATTEMPTS = 5
+INITIAL_RETRY_DELAY_SECONDS = 0.5
+RETRY_JITTER_RATIO = 0.25
+
+logger = logging.getLogger(__name__)
+
+
+def parse_retry_after(retry_after: str | None) -> float | None:
+    if not retry_after:
+        return None
+    retry_after = retry_after.strip()
+    with contextlib.suppress(ValueError):
+        return max(0.0, float(retry_after))
+    with contextlib.suppress(TypeError, ValueError, OverflowError):
+        retry_at = parsedate_to_datetime(retry_after)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+    return None
+
+
+def compute_retry_delay(attempt: int, *, retry_after: str | None = None) -> float:
+    parsed_retry_after = parse_retry_after(retry_after)
+    if parsed_retry_after is not None:
+        return parsed_retry_after
+    base_delay = INITIAL_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+    return base_delay + random.uniform(0.0, base_delay * RETRY_JITTER_RATIO)
+
+
+async def _request_with_retries(
+    method: str,
+    url: str,
+    *,
+    timeout: httpx.Timeout | float,
+    headers: dict[str, str] | None = None,
+    json_payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> httpx.Response:
+    """Perform an httpx request with exponential backoff on 429/5xx and transport errors."""
+    request_kwargs: dict[str, Any] = {}
+    if headers is not None:
+        request_kwargs["headers"] = headers
+    if json_payload is not None:
+        request_kwargs["json"] = json_payload
+    if params is not None:
+        request_kwargs["params"] = params
+
+    for attempt in range(1, MAX_API_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                response = await client.request(method, url, **request_kwargs)
+        except asyncio.CancelledError:
+            raise
+        except httpx.RequestError as error:
+            if attempt >= MAX_API_ATTEMPTS:
+                raise OpenRouterApiError(
+                    f"OpenRouter {method} {url} failed after {MAX_API_ATTEMPTS} attempts: {error}"
+                ) from error
+            delay = compute_retry_delay(attempt)
+            logger.warning(
+                "OpenRouter %s %s failed on attempt %d/%d (%s); retrying in %.2fs",
+                method,
+                url,
+                attempt,
+                MAX_API_ATTEMPTS,
+                error,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_API_ATTEMPTS:
+            delay = compute_retry_delay(
+                attempt,
+                retry_after=(
+                    response.headers.get("Retry-After") if response.status_code == 429 else None
+                ),
+            )
+            logger.warning(
+                "OpenRouter %s %s returned HTTP %s on attempt %d/%d; retrying in %.2fs",
+                method,
+                url,
+                response.status_code,
+                attempt,
+                MAX_API_ATTEMPTS,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        return response
+
+    raise RuntimeError(f"OpenRouter {method} {url} retry loop exited unexpectedly")
 
 
 class OpenRouterApiError(RuntimeError):
@@ -179,15 +280,14 @@ class OpenRouterClient:
         if provider:
             payload["provider"] = dict(provider)
 
-        import httpx
-
         timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.post(
-                f"{OPENROUTER_BASE_URL}/videos",
-                headers=self._request_headers(),
-                json=payload,
-            )
+        response = await _request_with_retries(
+            "POST",
+            f"{OPENROUTER_BASE_URL}/videos",
+            timeout=timeout,
+            headers=self._request_headers(),
+            json_payload=payload,
+        )
 
         if response.status_code >= 400:
             raise OpenRouterApiError(_extract_error_message(response))
@@ -202,26 +302,27 @@ class OpenRouterClient:
         if not polling_url and not job_id:
             raise OpenRouterApiError("A video polling URL or job ID is required.")
 
-        import httpx
-
         timeout = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.get(
-                polling_url or f"{OPENROUTER_BASE_URL}/videos/{job_id}",
-                headers=self._request_headers(),
-            )
+        response = await _request_with_retries(
+            "GET",
+            polling_url or f"{OPENROUTER_BASE_URL}/videos/{job_id}",
+            timeout=timeout,
+            headers=self._request_headers(),
+        )
 
         if response.status_code >= 400:
             raise OpenRouterApiError(_extract_error_message(response))
         return response.json()
 
     async def download_file_bytes(self, url: str) -> tuple[bytes, str | None]:
-        import httpx
-
         headers = self._request_headers() if "openrouter.ai/" in url else None
         timeout = httpx.Timeout(connect=30.0, read=600.0, write=30.0, pool=30.0)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.get(url, headers=headers)
+        response = await _request_with_retries(
+            "GET",
+            url,
+            timeout=timeout,
+            headers=headers,
+        )
 
         if response.status_code >= 400:
             raise OpenRouterApiError(_extract_error_message(response))
@@ -327,19 +428,20 @@ class OpenRouterClient:
             return await _collect_audio_stream(response.aiter_lines())
 
     async def _fetch_models_from_api(self) -> list[ModelInfo]:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(
-                f"{OPENROUTER_BASE_URL}/models/user",
+        response = await _request_with_retries(
+            "GET",
+            f"{OPENROUTER_BASE_URL}/models/user",
+            timeout=30.0,
+            headers=self._request_headers(),
+        )
+        if response.status_code in {404, 405, 422}:
+            response = await _request_with_retries(
+                "GET",
+                f"{OPENROUTER_BASE_URL}/models",
+                timeout=30.0,
                 headers=self._request_headers(),
+                params={"output_modalities": "all"},
             )
-            if response.status_code in {404, 405, 422}:
-                response = await client.get(
-                    f"{OPENROUTER_BASE_URL}/models",
-                    headers=self._request_headers(),
-                    params={"output_modalities": "all"},
-                )
 
         if response.status_code >= 400:
             raise OpenRouterApiError(_extract_error_message(response))
