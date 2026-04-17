@@ -5,6 +5,7 @@ from discord import Bot, Intents
 from .cogs.openrouter.cog import OpenRouterCog
 from .config import BOT_TOKEN
 from .config.auth import validate_required_config
+from .logging_setup import configure_logging
 
 
 def build_bot() -> Bot:
@@ -20,6 +21,7 @@ def build_bot() -> Bot:
 
 def main() -> None:
     validate_required_config()
+    configure_logging()
     bot = build_bot()
     bot.run(BOT_TOKEN)
 
