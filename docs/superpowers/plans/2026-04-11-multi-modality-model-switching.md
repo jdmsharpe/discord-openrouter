@@ -13,7 +13,7 @@
 ## File Map
 
 | File | Change |
-|---|---|
+| --- | --- |
 | `src/discord_openrouter/cogs/openrouter/state.py` | Add `Modality` and `ModalityModelStore` type aliases |
 | `src/discord_openrouter/cogs/openrouter/command_options.py` | Add `MODALITY_CHOICES` |
 | `src/discord_openrouter/cogs/openrouter/cog.py` | 3-tuple key on `channel_model_defaults` (3 sites); `modality` option on `/switch_model`; expand `/current_model` reads |
@@ -30,6 +30,7 @@
 ## Task 1: Add type aliases and `MODALITY_CHOICES`
 
 **Files:**
+
 - Modify: `src/discord_openrouter/cogs/openrouter/state.py`
 - Modify: `src/discord_openrouter/cogs/openrouter/command_options.py`
 - Test: `tests/test_openrouter_state.py`
@@ -110,6 +111,7 @@ git commit -m "feat: add Modality type aliases and MODALITY_CHOICES"
 ## Task 2: Migrate `channel_model_defaults` to 3-tuple key
 
 **Files:**
+
 - Modify: `src/discord_openrouter/cogs/openrouter/cog.py` (3 sites)
 - Modify: `src/discord_openrouter/cogs/openrouter/chat.py` (1 site)
 - Test: `tests/test_openrouter_state.py`
@@ -255,10 +257,12 @@ git commit -m "feat: migrate channel_model_defaults to 3-tuple (channel, user, m
 ## Task 3: Rewrite `build_current_model_embed`
 
 **Files:**
+
 - Modify: `src/discord_openrouter/cogs/openrouter/embeds.py`
 - Test: `tests/test_embeds.py`
 
 The current signature is:
+
 ```python
 def build_current_model_embed(*, active_model, active_options, channel_default, global_default) -> Embed
 ```
@@ -423,6 +427,7 @@ git commit -m "feat: rewrite build_current_model_embed to show all modality defa
 ## Task 4: Add `modality` to `/switch_model` and update `/current_model`
 
 **Files:**
+
 - Modify: `src/discord_openrouter/cogs/openrouter/cog.py`
 
 This task wires up the `modality` option on `/switch_model` and fixes the now-broken `build_current_model_embed` call in `/current_model`.
@@ -587,11 +592,13 @@ git commit -m "feat: add modality option to /switch_model and expand /current_mo
 ## Task 5: Add channel-default lookup to modality commands
 
 **Files:**
+
 - Modify: `src/discord_openrouter/cogs/openrouter/image.py`
 - Modify: `src/discord_openrouter/cogs/openrouter/video.py`
 - Modify: `src/discord_openrouter/cogs/openrouter/speech.py`
 
 Each command currently resolves its model as:
+
 ```python
 resolved_model = (model or OPENROUTER_DEFAULT_XYZ_MODEL).strip()
 ```
@@ -688,6 +695,7 @@ git commit -m "feat: add channel-default model lookup to image, video, tts, stt 
 ## Done
 
 At this point:
+
 - `/switch_model modality:image model:black-forest-labs/flux-1` sets the image default for your channel
 - `/switch_model modality:chat model:anthropic/claude-opus-4-6 scope:both` works exactly as before
 - `/current_model` shows a five-section embed covering all modalities
