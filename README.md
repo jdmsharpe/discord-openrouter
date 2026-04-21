@@ -114,9 +114,9 @@ python -m pip install -e ".[dev]"
 | `BOT_TOKEN` | **Yes** | Your Discord bot token |
 | `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs |
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
-| `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `minimax/minimax-m2.7`) |
-| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter image` (Default: `google/gemini-3.1-flash-image-preview`) |
-| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter video` (Default: `bytedance/seedance-2.0`) |
+| `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `xiaomi/mimo-v2-pro`) |
+| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter image` (Default: `google/gemini-3-pro-image-preview`) |
+| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter video` (Default: `kwaivgi/kling-video-o1`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter tts` (Default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter stt` (Default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default engine for PDF attachments: `cloudflare-ai`, `mistral-ocr`, `native` |
