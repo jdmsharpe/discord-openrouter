@@ -17,6 +17,7 @@ from ...util import (
 )
 from .attachments import AttachmentInputError, build_attachment_parts, build_user_content
 from .client import OpenRouterApiError
+from .embed_delivery import send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
 from .state import track_daily_cost
 
@@ -40,19 +41,25 @@ async def run_image_command(
         or OPENROUTER_DEFAULT_IMAGE_MODEL
     ).strip()
     if not resolved_model:
-        await ctx.followup.send(embed=error_embed("No image model is configured for this bot."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("No image model is configured for this bot."),
+            logger=cog.logger,
+        )
         return
 
     if attachment is not None and not _is_image_attachment(attachment):
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed("Only image attachments can be used with `/openrouter image`."),
+            logger=cog.logger,
         )
         return
 
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     modality_error = _validate_image_model_modalities(
@@ -60,24 +67,34 @@ async def run_image_command(
         requires_image_input=attachment is not None,
     )
     if modality_error:
-        await ctx.followup.send(embed=error_embed(modality_error))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed(modality_error),
+            logger=cog.logger,
+        )
         return
 
     try:
         attachment_parts = await build_attachment_parts([attachment] if attachment else [])
     except AttachmentInputError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("Failed to normalize image attachment: %s", error, exc_info=True)
-        await ctx.followup.send(
-            embed=error_embed("Failed to process the provided image attachment.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Failed to process the provided image attachment."),
+            logger=cog.logger,
         )
         return
 
     user_content = build_user_content(prompt, attachment_parts)
     if not user_content:
-        await ctx.followup.send(embed=error_embed("Please provide a prompt or image attachment."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Please provide a prompt or image attachment."),
+            logger=cog.logger,
+        )
         return
 
     image_config = _build_image_config(aspect_ratio=aspect_ratio, image_size=image_size)
@@ -94,24 +111,28 @@ async def run_image_command(
             session_id=f"image:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("Image generation failed: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     choice = (response_payload.get("choices") or [None])[0]
     if not isinstance(choice, dict):
-        await ctx.followup.send(
-            embed=error_embed("OpenRouter returned no choices for this image request.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("OpenRouter returned no choices for this image request."),
+            logger=cog.logger,
         )
         return
 
     message_payload = choice.get("message") or {}
     if not isinstance(message_payload, dict):
-        await ctx.followup.send(
-            embed=error_embed("OpenRouter returned an unexpected image response message.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("OpenRouter returned an unexpected image response message."),
+            logger=cog.logger,
         )
         return
 
@@ -119,10 +140,12 @@ async def run_image_command(
     image_assets = await build_image_assets(assistant_message.get("images") or [])
     files = build_image_files(image_assets)
     if not files:
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 "The model responded, but no images were returned in the response payload."
-            )
+            ),
+            logger=cog.logger,
         )
         return
 
@@ -169,7 +192,12 @@ async def run_image_command(
             request_cost_is_estimate=usage.cost is None and request_cost is not None,
         )
 
-    await ctx.followup.send(embeds=embeds, files=files)
+    await send_embed_batches(
+        ctx.followup.send,
+        embeds=embeds,
+        files=files,
+        logger=cog.logger,
+    )
 
 
 def _is_image_attachment(attachment: Attachment) -> bool:

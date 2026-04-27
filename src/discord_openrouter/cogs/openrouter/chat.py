@@ -9,7 +9,6 @@ from discord import (
     Attachment,
     Colour,
     Embed,
-    HTTPException,
     Interaction,
     Message,
     TextChannel,
@@ -51,6 +50,7 @@ from .embeds import (
     build_model_status_embed,
     error_embed,
 )
+from .embed_delivery import send_embed_batches
 from .image import build_image_assets, build_image_files
 from .state import find_active_conversation, remember_view_state, track_daily_cost
 from .tool_registry import build_runtime_tools
@@ -122,7 +122,11 @@ async def run_chat_command(
 
     channel = ctx.channel
     if channel is None:
-        await ctx.followup.send(embed=error_embed("Could not resolve the current channel."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Could not resolve the current channel."),
+            logger=cog.logger,
+        )
         return
 
     user = ctx.user
@@ -143,16 +147,20 @@ async def run_chat_command(
             else OPENROUTER_DEFAULT_PDF_ENGINE
         )
     except ValueError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     if reasoning_effort and reasoning_max_tokens is not None:
-        await ctx.followup.send(
-            embed=error_embed("Use either `reasoning_effort` or `reasoning_max_tokens`, not both.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Use either `reasoning_effort` or `reasoning_max_tokens`, not both."),
+            logger=cog.logger,
         )
         return
     if reasoning_max_tokens is not None and reasoning_max_tokens <= 0:
-        await ctx.followup.send(
-            embed=error_embed("`reasoning_max_tokens` must be greater than zero.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("`reasoning_max_tokens` must be greater than zero."),
+            logger=cog.logger,
         )
         return
     prompt_cache_error = _validate_prompt_cache_request(
@@ -160,33 +168,49 @@ async def run_chat_command(
         prompt_cache_ttl=prompt_cache_ttl,
     )
     if prompt_cache_error:
-        await ctx.followup.send(embed=error_embed(prompt_cache_error))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed(prompt_cache_error),
+            logger=cog.logger,
+        )
         return
     try:
         cache_control = build_prompt_cache_control(prompt_cache_ttl)
     except ValueError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     try:
         attachment_parts = await build_attachment_parts([attachment] if attachment else [])
     except AttachmentInputError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("Failed to normalize slash attachment: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed("Failed to process the provided attachment."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Failed to process the provided attachment."),
+            logger=cog.logger,
+        )
         return
 
     attachment_requirements = summarize_attachment_parts(attachment_parts)
     validation_error = _validate_model_input_modalities(model_info, attachment_requirements)
     if validation_error:
-        await ctx.followup.send(embed=error_embed(validation_error))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed(validation_error),
+            logger=cog.logger,
+        )
         return
 
     user_content = build_user_content(prompt, attachment_parts)
     if not user_content:
-        await ctx.followup.send(embed=error_embed("Please provide a prompt or attachment."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Please provide a prompt or attachment."),
+            logger=cog.logger,
+        )
         return
 
     conversation = Conversation(
@@ -248,11 +272,15 @@ async def handle_new_message_in_conversation(
     try:
         attachment_parts = await build_attachment_parts(message.attachments)
     except AttachmentInputError as error:
-        await message.reply(embed=error_embed(str(error)))
+        await send_embed_batches(message.reply, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("Failed to normalize follow-up attachments: %s", error, exc_info=True)
-        await message.reply(embed=error_embed("Failed to process one or more attachments."))
+        await send_embed_batches(
+            message.reply,
+            embed=error_embed("Failed to process one or more attachments."),
+            logger=cog.logger,
+        )
         return
 
     attachment_requirements = summarize_attachment_parts(attachment_parts)
@@ -261,11 +289,15 @@ async def handle_new_message_in_conversation(
         try:
             model_info = await cog.openrouter_client.get_model(conversation.settings.model)
         except OpenRouterApiError as error:
-            await message.reply(embed=error_embed(str(error)))
+            await send_embed_batches(message.reply, embed=error_embed(str(error)), logger=cog.logger)
             return
         validation_error = _validate_model_input_modalities(model_info, attachment_requirements)
         if validation_error:
-            await message.reply(embed=error_embed(validation_error))
+            await send_embed_batches(
+                message.reply,
+                embed=error_embed(validation_error),
+                logger=cog.logger,
+            )
             return
 
     user_content = build_user_content(message.content, attachment_parts)
@@ -464,23 +496,13 @@ async def _run_conversation_turn(
             tools=request_tools,
         )
 
-        try:
-            send_kwargs: dict[str, Any] = {
-                "embeds": embeds,
-                "view": view,
-            }
-            if image_assets:
-                send_kwargs["files"] = build_image_files(image_assets)
-            reply_message = await send_reply(**send_kwargs)
-        except HTTPException:
-            fallback_text = response_text or "No text content returned."
-            fallback_kwargs: dict[str, Any] = {
-                "content": truncate_text(fallback_text, 1900),
-                "view": view,
-            }
-            if image_assets:
-                fallback_kwargs["files"] = build_image_files(image_assets)
-            reply_message = await send_reply(**fallback_kwargs)
+        reply_message = await send_embed_batches(
+            send_reply,
+            embeds=embeds,
+            files=build_image_files(image_assets) if image_assets else None,
+            view=view,
+            logger=cog.logger,
+        )
 
         remember_view_state(cog, user_id, conversation.conversation_id, view, reply_message)
         return True
@@ -509,7 +531,7 @@ async def _resolve_model_for_request(
 
 async def _safe_error_reply(send_reply: Callable[..., Awaitable[Any]], description: str) -> None:
     try:
-        await send_reply(embed=error_embed(description))
+        await send_embed_batches(send_reply, embed=error_embed(description))
     except Exception:
         await send_reply(content=truncate_text(description, 1900))
 
