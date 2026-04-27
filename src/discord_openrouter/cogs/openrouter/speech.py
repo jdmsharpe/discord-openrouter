@@ -16,6 +16,7 @@ from ...util import (
 )
 from .attachments import MAX_ATTACHMENT_SIZE, AttachmentInputError, build_user_content
 from .client import OpenRouterApiError
+from .embed_delivery import send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
 from .state import track_daily_cost
 
@@ -50,10 +51,12 @@ async def run_tts_command(
     await ctx.defer()
 
     if len(input_text) > TTS_MAX_CHARS:
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 f"Text exceeds the {TTS_MAX_CHARS:,} character limit ({len(input_text):,} characters provided)."
-            )
+            ),
+            logger=cog.logger,
         )
         return
 
@@ -64,21 +67,27 @@ async def run_tts_command(
         or OPENROUTER_DEFAULT_TTS_MODEL
     ).strip()
     if not resolved_model:
-        await ctx.followup.send(embed=error_embed("No TTS model is configured for this bot."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("No TTS model is configured for this bot."),
+            logger=cog.logger,
+        )
         return
     normalized_voice = (voice or "").strip() or None
 
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     if model_info is not None and "audio" not in model_info.output_modalities:
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 f"`{model_info.id}` does not advertise audio output in the OpenRouter catalog."
-            )
+            ),
+            logger=cog.logger,
         )
         return
 
@@ -94,17 +103,19 @@ async def run_tts_command(
             session_id=f"tts:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("TTS generation failed: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     audio_bytes = response_payload.get("audio_bytes") or b""
     if not isinstance(audio_bytes, (bytes, bytearray)) or not audio_bytes:
-        await ctx.followup.send(
-            embed=error_embed("The model responded, but no audio data was returned in the stream.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("The model responded, but no audio data was returned in the stream."),
+            logger=cog.logger,
         )
         return
 
@@ -153,9 +164,11 @@ async def run_tts_command(
         )
 
     extension = "ogg" if response_format == "opus" else response_format
-    await ctx.followup.send(
+    await send_embed_batches(
+        ctx.followup.send,
         embeds=embeds,
         file=File(io.BytesIO(bytes(audio_bytes)), f"speech.{extension}"),
+        logger=cog.logger,
     )
 
 
@@ -186,10 +199,12 @@ async def run_stt_command(
     await ctx.defer()
 
     if not _is_audio_attachment(attachment):
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 "Attachment must be an audio file. Supports mp3, mp4, m4a, wav, webm, ogg, flac, aiff, and aac."
-            )
+            ),
+            logger=cog.logger,
         )
         return
 
@@ -200,39 +215,49 @@ async def run_stt_command(
         or OPENROUTER_DEFAULT_STT_MODEL
     ).strip()
     if not resolved_model:
-        await ctx.followup.send(embed=error_embed("No STT model is configured for this bot."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("No STT model is configured for this bot."),
+            logger=cog.logger,
+        )
         return
 
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     if model_info is not None and "audio" not in model_info.input_modalities:
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 f"`{model_info.id}` does not advertise audio input in the OpenRouter catalog."
-            )
+            ),
+            logger=cog.logger,
         )
         return
     if model_info is not None and "text" not in model_info.output_modalities:
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 f"`{model_info.id}` does not advertise text output in the OpenRouter catalog."
-            )
+            ),
+            logger=cog.logger,
         )
         return
 
     try:
         attachment_parts = [await _build_stt_attachment_part(attachment)]
     except AttachmentInputError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("Failed to normalize STT attachment: %s", error, exc_info=True)
-        await ctx.followup.send(
-            embed=error_embed("Failed to process the provided audio attachment.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("Failed to process the provided audio attachment."),
+            logger=cog.logger,
         )
         return
 
@@ -246,32 +271,38 @@ async def run_stt_command(
             session_id=f"stt:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("STT generation failed: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     choice = (response_payload.get("choices") or [None])[0]
     if not isinstance(choice, dict):
-        await ctx.followup.send(
-            embed=error_embed("OpenRouter returned no choices for this STT request.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("OpenRouter returned no choices for this STT request."),
+            logger=cog.logger,
         )
         return
 
     message_payload = choice.get("message") or {}
     if not isinstance(message_payload, dict):
-        await ctx.followup.send(
-            embed=error_embed("OpenRouter returned an unexpected STT response message.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("OpenRouter returned an unexpected STT response message."),
+            logger=cog.logger,
         )
         return
 
     assistant_message = sanitize_assistant_message(message_payload)
     transcript = extract_message_text(assistant_message)
     if not transcript:
-        await ctx.followup.send(
-            embed=error_embed("The model responded, but no transcript text was returned.")
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("The model responded, but no transcript text was returned."),
+            logger=cog.logger,
         )
         return
 
@@ -313,7 +344,7 @@ async def run_stt_command(
             request_cost_is_estimate=usage.cost is None and request_cost is not None,
         )
 
-    await ctx.followup.send(embeds=embeds)
+    await send_embed_batches(ctx.followup.send, embeds=embeds, logger=cog.logger)
 
 
 def _build_stt_prompt(instructions: str | None) -> str:

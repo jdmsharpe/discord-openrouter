@@ -12,6 +12,7 @@ from discord import ApplicationContext, Attachment, Colour, Embed, File, HTTPExc
 from ...config import OPENROUTER_DEFAULT_VIDEO_MODEL, SHOW_COST_EMBEDS
 from .attachments import AttachmentInputError, build_attachment_parts
 from .client import OpenRouterApiError
+from .embed_delivery import send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
 from .state import track_daily_cost
 
@@ -42,27 +43,35 @@ async def run_video_command(
         or OPENROUTER_DEFAULT_VIDEO_MODEL
     ).strip()
     if not resolved_model:
-        await ctx.followup.send(embed=error_embed("No video model is configured for this bot."))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed("No video model is configured for this bot."),
+            logger=cog.logger,
+        )
         return
 
     if size and (aspect_ratio or resolution):
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed("Use either `size` or `resolution`/`aspect_ratio`, not both."),
+            logger=cog.logger,
         )
         return
 
     if attachment is not None and not _is_image_attachment(attachment):
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 "Only image attachments can be used as `/openrouter video` references."
             ),
+            logger=cog.logger,
         )
         return
 
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     modality_error = _validate_video_model_modalities(
@@ -70,7 +79,11 @@ async def run_video_command(
         requires_image_input=attachment is not None,
     )
     if modality_error:
-        await ctx.followup.send(embed=error_embed(modality_error))
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed(modality_error),
+            logger=cog.logger,
+        )
         return
 
     input_references: list[dict[str, Any]] | None = None
@@ -78,14 +91,20 @@ async def run_video_command(
         try:
             attachment_parts = await build_attachment_parts([attachment])
         except AttachmentInputError as error:
-            await ctx.followup.send(embed=error_embed(str(error)))
+            await send_embed_batches(
+                ctx.followup.send,
+                embed=error_embed(str(error)),
+                logger=cog.logger,
+            )
             return
         except Exception as error:
             cog.logger.error(
                 "Failed to normalize video reference attachment: %s", error, exc_info=True
             )
-            await ctx.followup.send(
+            await send_embed_batches(
+                ctx.followup.send,
                 embed=error_embed("Failed to process the provided image attachment."),
+                logger=cog.logger,
             )
             return
 
@@ -95,8 +114,10 @@ async def run_video_command(
             if isinstance(part, dict) and str(part.get("type") or "").strip().lower() == "image_url"
         ]
         if not input_references:
-            await ctx.followup.send(
+            await send_embed_batches(
+                ctx.followup.send,
                 embed=error_embed("The reference attachment must be an image."),
+                logger=cog.logger,
             )
             return
 
@@ -119,14 +140,14 @@ async def run_video_command(
             initial_status=_coerce_str(submit_response.get("status")) or "pending",
         )
     except TimeoutError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except OpenRouterApiError as error:
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
     except Exception as error:
         cog.logger.error("Video generation failed: %s", error, exc_info=True)
-        await ctx.followup.send(embed=error_embed(str(error)))
+        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
         return
 
     unsigned_urls = [
@@ -135,10 +156,12 @@ async def run_video_command(
         if isinstance(url, str) and url.strip()
     ]
     if not unsigned_urls:
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=error_embed(
                 "The video job completed, but no downloadable video URLs were returned."
             ),
+            logger=cog.logger,
         )
         return
 
@@ -193,7 +216,12 @@ async def run_video_command(
     ]
     try:
         if files:
-            await ctx.followup.send(embeds=embeds, files=files)
+            await send_embed_batches(
+                ctx.followup.send,
+                embeds=embeds,
+                files=files,
+                logger=cog.logger,
+            )
             return
     except HTTPException as error:
         cog.logger.warning("Failed to upload generated videos to Discord: %s", error, exc_info=True)
@@ -203,7 +231,7 @@ async def run_video_command(
     )
     if download_links:
         embeds[0].add_field(name="Downloads", value=download_links, inline=False)
-    await ctx.followup.send(embeds=embeds)
+    await send_embed_batches(ctx.followup.send, embeds=embeds, logger=cog.logger)
 
 
 async def _poll_until_complete(

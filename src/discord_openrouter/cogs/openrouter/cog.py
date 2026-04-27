@@ -48,6 +48,7 @@ from .embeds import (
     build_model_status_embed,
     error_embed,
 )
+from .embed_delivery import send_embed_batches
 from .image import run_image_command
 from .speech import run_stt_command, run_tts_command
 from .state import (
@@ -321,16 +322,22 @@ class OpenRouterCog(commands.Cog):
                 refresh=bool(refresh),
             )
         except OpenRouterApiError as error:
-            await ctx.followup.send(embed=error_embed(str(error)))
+            await send_embed_batches(
+                ctx.followup.send,
+                embed=error_embed(str(error)),
+                logger=self.logger,
+            )
             return
 
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=build_model_list_embed(
                 models,
                 query=query,
                 input_modality=input_modality,
                 output_modality=output_modality,
-            )
+            ),
+            logger=self.logger,
         )
 
     @openrouter.command(
@@ -364,7 +371,7 @@ class OpenRouterCog(commands.Cog):
             channel_defaults=channel_defaults,
             global_defaults=global_defaults,
         )
-        await ctx.respond(embed=embed)
+        await send_embed_batches(ctx.respond, embed=embed, logger=self.logger)
 
     @openrouter.command(
         name="switch_model",
@@ -402,7 +409,11 @@ class OpenRouterCog(commands.Cog):
         try:
             model_info = await self.openrouter_client.get_model(model)
         except OpenRouterApiError as error:
-            await ctx.followup.send(embed=error_embed(str(error)))
+            await send_embed_batches(
+                ctx.followup.send,
+                embed=error_embed(str(error)),
+                logger=self.logger,
+            )
             return
 
         resolved_model = model_info.id if model_info is not None else model.strip()
@@ -447,13 +458,15 @@ class OpenRouterCog(commands.Cog):
                 "Model was not found in the cached catalog, so it was saved exactly as typed."
             )
 
-        await ctx.followup.send(
+        await send_embed_batches(
+            ctx.followup.send,
             embed=build_model_status_embed(
                 title="Model Updated",
                 model=resolved_model,
                 description="\n".join(lines[1:]) if len(lines) > 1 else None,
                 model_info=model_info,
-            )
+            ),
+            logger=self.logger,
         )
 
     @openrouter.command(
