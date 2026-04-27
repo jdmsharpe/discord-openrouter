@@ -14,7 +14,7 @@ authors = [
 ]
 dependencies = [
   "httpx~=0.28",
-  "openrouter",
+  "openrouter~=0.9",
   "py-cord~=2.7",
   "python-dotenv~=1.2",
 ]
