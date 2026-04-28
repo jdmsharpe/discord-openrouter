@@ -18,10 +18,10 @@ load_dotenv()
 
 TRUE_ENV_VALUES = frozenset({"true", "1", "yes"})
 REQUIRED_ENV_VARS = ("BOT_TOKEN", "OPENROUTER_API_KEY")
-DEFAULT_TEXT_MODEL = "xiaomi/mimo-v2-pro"
-DEFAULT_IMAGE_MODEL = "google/gemini-3-pro-image-preview"
+DEFAULT_TEXT_MODEL = "moonshotai/kimi-k2.6"
+DEFAULT_IMAGE_MODEL = "openai/gpt-5.4-image-2"
 DEFAULT_VIDEO_MODEL = "kwaivgi/kling-video-o1"
-DEFAULT_TTS_MODEL = "openai/gpt-audio"
+DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview"
 DEFAULT_STT_MODEL = "openai/gpt-audio"
 DEFAULT_PDF_ENGINE = None
 DEFAULT_MODEL = DEFAULT_TEXT_MODEL

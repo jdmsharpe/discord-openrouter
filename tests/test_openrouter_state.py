@@ -24,7 +24,7 @@ def test_prune_runtime_state_removes_stale_entries_and_preserves_active_entries(
         conversation_id=2,
         conversation_starter_id=22,
         channel_id=100,
-        settings=ChatSettings(model="minimax/minimax-m2.7"),
+        settings=ChatSettings(model="moonshotai/kimi-k2.6"),
         updated_at=now - timedelta(minutes=10),
     )
 

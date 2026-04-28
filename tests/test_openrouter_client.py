@@ -60,7 +60,7 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
 
     payload = asyncio.run(
         client.create_chat_completion(
-            model="minimax/minimax-m2.7",
+            model="moonshotai/kimi-k2.6",
             messages=[{"role": "user", "content": "hello"}],
             modalities=["image", "text"],
             image_config={"aspect_ratio": "16:9", "image_size": "2K"},
@@ -80,7 +80,7 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.kwargs["api_key"] == "test-key"
     assert instance.kwargs["http_referer"] == "https://example.com"
     assert instance.kwargs["x_open_router_title"] == "discord-openrouter"
-    assert instance.chat.calls[0]["model"] == "minimax/minimax-m2.7"
+    assert instance.chat.calls[0]["model"] == "moonshotai/kimi-k2.6"
     assert instance.chat.calls[0]["modalities"] == ["image", "text"]
     assert instance.chat.calls[0]["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
     assert instance.chat.calls[0]["plugins"] == [
@@ -175,8 +175,8 @@ def test_list_models_uses_cache_and_filters(monkeypatch):
                 output_modalities=["text", "audio"],
             ),
             ModelInfo(
-                id="minimax/minimax-m2.7",
-                name="MiniMax M2.7",
+                id="moonshotai/kimi-k2.6",
+                name="Kimi K2.6",
                 pricing=ModelPricing(),
                 input_modalities=["text"],
                 output_modalities=["text"],
@@ -190,15 +190,15 @@ def test_list_models_uses_cache_and_filters(monkeypatch):
         ]
     )
 
-    first = asyncio.run(client.list_models(query="minimax", limit=5))
+    first = asyncio.run(client.list_models(query="kimi", limit=5))
     second = asyncio.run(client.list_models(query="mini", limit=5))
     third = asyncio.run(client.list_models(output_modality="audio", limit=5))
     fourth = asyncio.run(client.list_models(input_modality="image", limit=5))
 
-    assert [model.id for model in first] == ["minimax/minimax-m2.7"]
-    assert [model.id for model in second][:2] == [
-        "minimax/minimax-m2.7",
+    assert [model.id for model in first] == ["moonshotai/kimi-k2.6"]
+    assert [model.id for model in second] == [
         "openai/gpt-audio-mini",
+        "openai/gpt-4o-mini",
     ]
     assert [model.id for model in third] == ["openai/gpt-audio-mini"]
     assert [model.id for model in fourth] == [
@@ -213,14 +213,14 @@ def test_get_model_prefers_exact_match(monkeypatch):
     client.list_models = AsyncMock(
         return_value=[
             ModelInfo(id="openai/gpt-4o-mini", name="GPT-4o Mini"),
-            ModelInfo(id="minimax/minimax-m2.7", name="MiniMax M2.7"),
+            ModelInfo(id="moonshotai/kimi-k2.6", name="Kimi K2.6"),
         ]
     )
 
-    model = asyncio.run(client.get_model("minimax/minimax-m2.7"))
+    model = asyncio.run(client.get_model("moonshotai/kimi-k2.6"))
 
     assert model is not None
-    assert model.id == "minimax/minimax-m2.7"
+    assert model.id == "moonshotai/kimi-k2.6"
 
 
 def test_fetch_models_fallback_requests_all_modalities(monkeypatch):
