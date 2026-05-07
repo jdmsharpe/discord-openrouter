@@ -61,7 +61,8 @@ async def _request_with_retries(
     method: str,
     url: str,
     *,
-    timeout: httpx.Timeout | float,
+    # `timeout` forwards to httpx.AsyncClient(timeout=...); httpx manages the deadline.
+    timeout: httpx.Timeout | float,  # noqa: ASYNC109
     headers: dict[str, str] | None = None,
     json_payload: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
