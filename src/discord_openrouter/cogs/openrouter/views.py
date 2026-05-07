@@ -36,7 +36,9 @@ def _initialize_view(view: View, *, timeout: float | None) -> None:
             loop.run_until_complete(_build_view_on_running_loop(view, timeout=timeout))
         finally:
             loop.close()
-        view._stopped = ConcurrentFuture()
+        # _stopped is normally asyncio.Future, but tests reach this branch with no loop;
+        # the concurrent.futures.Future is unwrapped via asyncio.wrap_future at await time.
+        view._stopped = ConcurrentFuture()  # type: ignore[assignment]
     else:
         View.__init__(view, timeout=timeout)
 
