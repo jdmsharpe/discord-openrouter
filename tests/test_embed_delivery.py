@@ -21,9 +21,7 @@ def test_count_embed_chars_includes_visible_text_fields():
     embed.set_footer(text="Footer")
     embed.set_author(name="Author")
 
-    assert count_embed_chars(embed) == len(
-        "TitleDescriptionFieldValueFooterAuthor"
-    )
+    assert count_embed_chars(embed) == len("TitleDescriptionFieldValueFooterAuthor")
 
 
 def test_pack_embeds_splits_aggregate_overflow():

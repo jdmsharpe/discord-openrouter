@@ -42,13 +42,13 @@ from .command_options import (
     VIDEO_ASPECT_RATIO_CHOICES,
     VIDEO_RESOLUTION_CHOICES,
 )
+from .embed_delivery import send_embed_batches
 from .embeds import (
     build_current_model_embed,
     build_model_list_embed,
     build_model_status_embed,
     error_embed,
 )
-from .embed_delivery import send_embed_batches
 from .image import run_image_command
 from .speech import run_stt_command, run_tts_command
 from .state import (

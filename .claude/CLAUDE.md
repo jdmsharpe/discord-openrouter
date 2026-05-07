@@ -6,7 +6,7 @@
 python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 cp .env.example .env   # then fill in required values
-python src/bot.py      # or: docker-compose up --build
+python src/bot.py      # or: docker compose up --build
 ```
 
 ## Environment Variables
@@ -30,6 +30,12 @@ python src/bot.py      # or: docker-compose up --build
 | `LOG_FORMAT` | No | `text` (default) or `json` for structured JSON-lines output |
 
 `validate_required_config()` raises `RuntimeError` at startup for missing/blank `BOT_TOKEN` or `OPENROUTER_API_KEY`.
+
+## Gotchas
+
+- Uses **`py-cord`** (not `discord.py`). The slash-command API differs; don't mix docs between the two.
+- `GUILD_IDS` empty → commands register globally (up to 1-hour propagation delay). Set it to a test guild ID during development for instant updates.
+- Unlike the other AI bots in this family, discord-openrouter does **not** ship a `pricing.yaml`. Pricing is fetched dynamically from OpenRouter's `/v1/models` endpoint and cached per `OPENROUTER_MODEL_CACHE_TTL_SECONDS`.
 
 ## Supported Entry Points
 
@@ -108,3 +114,4 @@ pytest -q
 - Conversation state is pruned on a 15-minute `tasks.loop`. `CONVERSATION_TTL`, `MAX_ACTIVE_CONVERSATIONS`, `VIEW_STATE_TTL`, and `DAILY_COST_RETENTION_DAYS` live in `cogs/openrouter/state.py`.
 - Every slash command enters via `cog_before_invoke` which binds a fresh request id via `discord_openrouter.logging_setup.bind_request_id`. `on_message` does the same for follow-up messages.
 - `LOG_FORMAT=json` switches log output to JSON lines suitable for log aggregators; leave unset for human-readable text mode.
+- **Async file I/O**: blocking `open()` and `pathlib` methods (`read_bytes`, `write_bytes`, `unlink`, etc.) inside `async def` freeze the Discord event loop and stall every concurrent slash command. Wrap them with `asyncio.to_thread(...)` so the I/O runs on a worker thread. Enforced by `ruff` (`ASYNC230`/`ASYNC240`).

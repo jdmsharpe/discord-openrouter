@@ -78,7 +78,9 @@ async def run_tts_command(
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     if model_info is not None and "audio" not in model_info.output_modalities:
@@ -103,11 +105,15 @@ async def run_tts_command(
             session_id=f"tts:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("TTS generation failed: %s", error, exc_info=True)
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     audio_bytes = response_payload.get("audio_bytes") or b""
@@ -225,7 +231,9 @@ async def run_stt_command(
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     if model_info is not None and "audio" not in model_info.input_modalities:
@@ -250,7 +258,9 @@ async def run_stt_command(
     try:
         attachment_parts = [await _build_stt_attachment_part(attachment)]
     except AttachmentInputError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("Failed to normalize STT attachment: %s", error, exc_info=True)
@@ -271,11 +281,15 @@ async def run_stt_command(
             session_id=f"stt:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("STT generation failed: %s", error, exc_info=True)
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     choice = (response_payload.get("choices") or [None])[0]

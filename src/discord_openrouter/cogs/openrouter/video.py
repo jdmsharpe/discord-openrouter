@@ -71,7 +71,9 @@ async def run_video_command(
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     modality_error = _validate_video_model_modalities(
@@ -140,14 +142,20 @@ async def run_video_command(
             initial_status=_coerce_str(submit_response.get("status")) or "pending",
         )
     except TimeoutError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("Video generation failed: %s", error, exc_info=True)
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     unsigned_urls = [
