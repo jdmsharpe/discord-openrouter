@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -52,6 +53,28 @@ def _make_conversation(
     )
 
 
+def _serialize_command_group_payload(group):
+    return {
+        "name": group.name,
+        "description": group.description,
+        "options": [
+            {
+                "name": command.name,
+                "description": command.description,
+                "options": [
+                    option.to_dict()
+                    for option in command.options
+                    if option.input_type is not None
+                ],
+                "type": 1,
+                "nsfw": False,
+            }
+            for command in group.subcommands
+        ],
+        "nsfw": False,
+    }
+
+
 class TestInit:
     def test_initial_state(self):
         cog = _make_cog()
@@ -60,6 +83,47 @@ class TestInit:
         assert cog.last_view_messages == {}
         assert cog.daily_costs == {}
         assert cog.channel_model_defaults == {}
+
+    def test_registered_command_groups_fit_discord_size_limit(self):
+        """Discord rejects any single top-level command payload over 8000 bytes."""
+
+        cog = _make_cog()
+        commands_by_name = {command.name: command for command in cog.get_commands()}
+
+        assert set(commands_by_name) == {
+            "openrouter",
+            "openrouter-media",
+            "openrouter-tools",
+        }
+        assert [command.name for command in commands_by_name["openrouter"].subcommands] == [
+            "check_permissions",
+            "chat",
+            "models",
+            "current_model",
+            "switch_model",
+        ]
+        assert [command.name for command in commands_by_name["openrouter-media"].subcommands] == [
+            "image",
+            "video",
+        ]
+        assert [command.name for command in commands_by_name["openrouter-tools"].subcommands] == [
+            "tts",
+            "stt",
+        ]
+
+        payload_sizes = {
+            name: len(
+                json.dumps(
+                    _serialize_command_group_payload(command),
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+            for name, command in commands_by_name.items()
+        }
+
+        assert payload_sizes["openrouter"] < 8000
+        assert payload_sizes["openrouter-media"] < 8000
+        assert payload_sizes["openrouter-tools"] < 8000
 
 
 class TestCogUnload:
