@@ -18,10 +18,10 @@ python src/bot.py      # or: docker compose up --build
 | `GUILD_IDS` | Yes | Comma-separated Discord guild IDs for slash command registration |
 | `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Default chat model when no channel or conversation default is set |
-| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default for `/openrouter image` |
-| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default for `/openrouter video` |
-| `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default for `/openrouter tts` |
-| `OPENROUTER_DEFAULT_STT_MODEL` | No | Default for `/openrouter stt` |
+| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default for `/openrouter-media image` |
+| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default for `/openrouter-media video` |
+| `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default for `/openrouter-tools tts` |
+| `OPENROUTER_DEFAULT_STT_MODEL` | No | Default for `/openrouter-tools stt` |
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | PDF parser for attachments (`cloudflare-ai`, `mistral-ocr`, `native`) |
 | `OPENROUTER_SITE_URL` | No | App attribution header sent to OpenRouter for rankings |
 | `OPENROUTER_APP_NAME` | No | App attribution title |
