@@ -1,6 +1,7 @@
 import asyncio
 import base64
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import AsyncMock
 
 from discord_openrouter.cogs.openrouter import client as client_module
@@ -27,7 +28,7 @@ class _FakeChat:
 
 
 class _FakeOpenRouter:
-    instances = []
+    instances: ClassVar[list] = []
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
@@ -233,7 +234,7 @@ def test_fetch_models_fallback_requests_all_modalities(monkeypatch):
             return self._payload
 
     class _FakeAsyncClient:
-        calls = []
+        calls: ClassVar[list] = []
 
         def __init__(self, **_kwargs):
             pass
@@ -414,7 +415,7 @@ def test_create_video_generation_uses_videos_endpoint(monkeypatch):
             return self._payload
 
     class _FakeAsyncClient:
-        calls = []
+        calls: ClassVar[list] = []
 
         def __init__(self, **_kwargs):
             pass
@@ -497,7 +498,7 @@ def test_get_video_generation_and_download_file_bytes(monkeypatch):
             return self._payload
 
     class _FakeAsyncClient:
-        calls = []
+        calls: ClassVar[list] = []
 
         def __init__(self, **_kwargs):
             pass
