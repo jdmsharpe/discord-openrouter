@@ -8,7 +8,7 @@ import json
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any
 
@@ -44,8 +44,8 @@ def parse_retry_after(retry_after: str | None) -> float | None:
     with contextlib.suppress(TypeError, ValueError, OverflowError):
         retry_at = parsedate_to_datetime(retry_after)
         if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=timezone.utc)
-        return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+            retry_at = retry_at.replace(tzinfo=UTC)
+        return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
     return None
 
 

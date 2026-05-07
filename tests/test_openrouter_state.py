@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,7 +12,7 @@ from discord_openrouter.util import ChatSettings, Conversation
 
 
 def test_prune_runtime_state_removes_stale_entries_and_preserves_active_entries():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_conversation = Conversation(
         conversation_id=1,
         conversation_starter_id=11,

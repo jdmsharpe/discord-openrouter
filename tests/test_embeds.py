@@ -228,7 +228,13 @@ def test_build_current_model_embed_omits_active_conversation_line_when_no_active
         active_model=None,
         active_options=None,
         channel_defaults={},
-        global_defaults={"chat": "openai/gpt-4o-mini", "image": None, "video": None, "tts": None, "stt": None},
+        global_defaults={
+            "chat": "openai/gpt-4o-mini",
+            "image": None,
+            "video": None,
+            "tts": None,
+            "stt": None,
+        },
     )
 
     desc = embed.description or ""

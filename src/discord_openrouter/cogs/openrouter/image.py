@@ -59,7 +59,9 @@ async def run_image_command(
     try:
         model_info = await cog.openrouter_client.get_model(resolved_model)
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     modality_error = _validate_image_model_modalities(
@@ -77,7 +79,9 @@ async def run_image_command(
     try:
         attachment_parts = await build_attachment_parts([attachment] if attachment else [])
     except AttachmentInputError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("Failed to normalize image attachment: %s", error, exc_info=True)
@@ -111,11 +115,15 @@ async def run_image_command(
             session_id=f"image:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("Image generation failed: %s", error, exc_info=True)
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     choice = (response_payload.get("choices") or [None])[0]

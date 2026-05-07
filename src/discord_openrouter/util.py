@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 CHUNK_TEXT_SIZE = 3500
@@ -103,10 +103,10 @@ class Conversation:
     settings: ChatSettings
     messages: list[dict[str, Any]] = field(default_factory=list)
     paused: bool = False
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def touch(self) -> None:
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def append_user_message(self, message: dict[str, Any]) -> None:
         self.messages.append(deepcopy(message))

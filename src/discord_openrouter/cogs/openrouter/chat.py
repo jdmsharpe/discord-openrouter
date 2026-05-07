@@ -42,6 +42,7 @@ from .attachments import (
     summarize_attachment_parts,
 )
 from .client import OpenRouterApiError
+from .embed_delivery import send_embed_batches
 from .embeds import (
     append_citations_embed,
     append_reasoning_embeds,
@@ -50,7 +51,6 @@ from .embeds import (
     build_model_status_embed,
     error_embed,
 )
-from .embed_delivery import send_embed_batches
 from .image import build_image_assets, build_image_files
 from .state import find_active_conversation, remember_view_state, track_daily_cost
 from .tool_registry import build_runtime_tools
@@ -147,7 +147,9 @@ async def run_chat_command(
             else OPENROUTER_DEFAULT_PDF_ENGINE
         )
     except ValueError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     if reasoning_effort and reasoning_max_tokens is not None:
         await send_embed_batches(
@@ -177,13 +179,17 @@ async def run_chat_command(
     try:
         cache_control = build_prompt_cache_control(prompt_cache_ttl)
     except ValueError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
 
     try:
         attachment_parts = await build_attachment_parts([attachment] if attachment else [])
     except AttachmentInputError as error:
-        await send_embed_batches(ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger)
+        await send_embed_batches(
+            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+        )
         return
     except Exception as error:
         cog.logger.error("Failed to normalize slash attachment: %s", error, exc_info=True)
@@ -289,7 +295,9 @@ async def handle_new_message_in_conversation(
         try:
             model_info = await cog.openrouter_client.get_model(conversation.settings.model)
         except OpenRouterApiError as error:
-            await send_embed_batches(message.reply, embed=error_embed(str(error)), logger=cog.logger)
+            await send_embed_batches(
+                message.reply, embed=error_embed(str(error)), logger=cog.logger
+            )
             return
         validation_error = _validate_model_input_modalities(model_info, attachment_requirements)
         if validation_error:

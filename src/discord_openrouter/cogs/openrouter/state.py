@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, TypeAlias
 
 from discord import Member, Message, User
@@ -26,7 +26,7 @@ DAILY_COST_RETENTION_DAYS = 30
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _extract_daily_total(value: float | tuple[float, datetime]) -> float:
