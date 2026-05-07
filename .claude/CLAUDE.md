@@ -5,7 +5,8 @@
 ```bash
 python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-cp .env.example .env   # then fill in required values
+cp .env.example .env                  # then fill in required values
+git config core.hooksPath .githooks   # enable repo pre-commit hook
 python src/bot.py      # or: docker compose up --build
 ```
 
@@ -70,9 +71,9 @@ src/
         ├── client.py                # Retry-wrapped httpx calls + dynamic model catalog
         ├── cog.py
         ├── command_options.py
+        ├── embed_delivery.py        # Discord embed batching (6000-char/10-embed caps)
         ├── embeds.py
         ├── image.py
-        ├── models.py
         ├── speech.py
         ├── state.py                 # Conversation TTL + prune logic
         ├── tool_registry.py
