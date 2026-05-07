@@ -65,6 +65,16 @@ from .video import run_video_command
 
 class OpenRouterCog(commands.Cog):
     openrouter = SlashCommandGroup("openrouter", "OpenRouter commands", guild_ids=GUILD_IDS)
+    openrouter_media = SlashCommandGroup(
+        "openrouter-media",
+        "OpenRouter image and video commands",
+        guild_ids=GUILD_IDS,
+    )
+    openrouter_tools = SlashCommandGroup(
+        "openrouter-tools",
+        "OpenRouter speech commands",
+        guild_ids=GUILD_IDS,
+    )
 
     def __init__(self, bot):
         self.logger = logging.getLogger(__name__)
@@ -469,7 +479,7 @@ class OpenRouterCog(commands.Cog):
             logger=self.logger,
         )
 
-    @openrouter.command(
+    @openrouter_media.command(
         name="image",
         description="Generates or edits an image from a prompt.",
     )
@@ -519,7 +529,7 @@ class OpenRouterCog(commands.Cog):
             attachment=attachment,
         )
 
-    @openrouter.command(
+    @openrouter_media.command(
         name="video",
         description="Generates a video from a prompt.",
     )
@@ -602,7 +612,7 @@ class OpenRouterCog(commands.Cog):
             seed=seed,
         )
 
-    @openrouter.command(
+    @openrouter_tools.command(
         name="tts",
         description="Converts text to speech audio.",
     )
@@ -656,7 +666,7 @@ class OpenRouterCog(commands.Cog):
             response_format=response_format,
         )
 
-    @openrouter.command(
+    @openrouter_tools.command(
         name="stt",
         description="Generates text from the input audio.",
     )

@@ -8,7 +8,7 @@
 
 ## Overview
 
-A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. All functionality is cleanly grouped under the `/openrouter` namespace, supporting image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread.
+A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. It supports image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread.
 
 ## Features
 
@@ -34,28 +34,28 @@ Start a conversation with an OpenRouter model.
 - Supports Anthropic-style prompt caching explicitly via `prompt_cache_ttl` (`5m` or `1h`).
 - Includes tuning options like `temperature`, `top_p`, `max_tokens`, `exclude_reasoning`, and `pdf_engine`.
 
-### `/openrouter image`
+### `/openrouter-media image`
 
 Generate a new image or remix an uploaded one.
 
 - **Options:** Customizable `aspect_ratio` (includes standard and extended options like `1:8`) and `image_size`.
 - Attach an existing Discord image to remix or edit it.
 
-### `/openrouter video`
+### `/openrouter-media video`
 
 Generate a video from a text prompt, with an optional reference image.
 
 - **Options:** Customizable `aspect_ratio`, `resolution`, `size` (exact dimensions like `1280x720`), `duration`, `generate_audio`, and `seed`.
 - Polled asynchronously server-side until complete, then downloaded and attached to the channel.
 
-### `/openrouter tts`
+### `/openrouter-tools tts`
 
 Convert text into speech audio.
 
 - **Options:** Customizable `voice`, `instructions`, and `response_format` (`mp3`, `wav`, `flac`, `opus`).
 - Text input is capped at `4096` characters per request.
 
-### `/openrouter stt`
+### `/openrouter-tools stt`
 
 Generate text from an uploaded audio file.
 
@@ -115,10 +115,10 @@ python -m pip install -e ".[dev]"
 | `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs |
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `moonshotai/kimi-k2.6`) |
-| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter image` (Default: `openai/gpt-5.4-image-2`) |
-| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter video` (Default: `kwaivgi/kling-video-o1`) |
-| `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter tts` (Default: `google/gemini-3.1-flash-tts-preview`) |
-| `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter stt` (Default: `openai/gpt-audio`) |
+| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `openai/gpt-5.4-image-2`) |
+| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter-media video` (Default: `kwaivgi/kling-video-o1`) |
+| `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter-tools tts` (Default: `google/gemini-3.1-flash-tts-preview`) |
+| `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter-tools stt` (Default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default engine for PDF attachments: `cloudflare-ai`, `mistral-ocr`, `native` |
 | `OPENROUTER_SITE_URL` | No | Optional `HTTP-Referer` sent to OpenRouter |
 | `OPENROUTER_APP_NAME` | No | Optional app name sent as `X-OpenRouter-Title` header |
@@ -173,8 +173,8 @@ Try these multimodal and tool-assisted commands:
 - **PDF Analysis:** `/openrouter chat prompt:Summarize this contract attachment:<pdf> pdf_engine:mistral-ocr`
 - **Video Analysis:** `/openrouter chat model:<video-model> prompt:What happens in this clip? attachment:<video>`
 - **Prompt Caching:** `/openrouter chat model:anthropic/claude-sonnet-4.5 prompt_cache_ttl:1h prompt:Use this rubric...`
-- **Video Generation:** `/openrouter video prompt:A neon train racing through a rainy cyberpunk city at night`
-- **Video from Image:** `/openrouter video prompt:Animate this character walking forward attachment:<image>`
+- **Video Generation:** `/openrouter-media video prompt:A neon train racing through a rainy cyberpunk city at night`
+- **Video from Image:** `/openrouter-media video prompt:Animate this character walking forward attachment:<image>`
 
 ### Troubleshooting & Notes
 

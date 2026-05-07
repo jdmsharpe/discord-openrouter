@@ -62,7 +62,7 @@ async def run_video_command(
         await send_embed_batches(
             ctx.followup.send,
             embed=error_embed(
-                "Only image attachments can be used as `/openrouter video` references."
+                "Only image attachments can be used as `/openrouter-media video` references."
             ),
             logger=cog.logger,
         )

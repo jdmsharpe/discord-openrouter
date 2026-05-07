@@ -51,7 +51,7 @@ async def run_image_command(
     if attachment is not None and not _is_image_attachment(attachment):
         await send_embed_batches(
             ctx.followup.send,
-            embed=error_embed("Only image attachments can be used with `/openrouter image`."),
+            embed=error_embed("Only image attachments can be used with `/openrouter-media image`."),
             logger=cog.logger,
         )
         return
