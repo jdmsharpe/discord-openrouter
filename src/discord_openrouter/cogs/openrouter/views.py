@@ -109,7 +109,7 @@ class ButtonView(View):
                 )
                 return
 
-            selected_values = [value for value in tool_select.values if is_known_tool(value)]
+            selected_values = [value for value in (tool_select.values or []) if is_known_tool(value)]
             active_names, error_message = self._on_tools_changed(selected_values, conversation)
             if error_message:
                 await interaction.response.send_message(error_message, ephemeral=True)
