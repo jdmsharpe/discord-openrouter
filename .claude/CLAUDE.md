@@ -87,7 +87,6 @@ Only `src/bot.py` remains at the repo root; code imports should target `discord_
 
 - `pytest` runs with `pythonpath = ["src"]`.
 - The test suite targets the namespaced package layout under `discord_openrouter...`.
-- `tests/test_package_import.py` is the package import smoke test.
 - Runtime state pruning is covered in `tests/test_openrouter_state.py`.
 - Retry-loop semantics are covered in `tests/test_openrouter_client.py`.
 - New tests and patches should target real owners under `discord_openrouter...`.
