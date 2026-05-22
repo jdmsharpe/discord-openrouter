@@ -67,6 +67,9 @@ def test_default_model_and_cache_ttl_are_applied(monkeypatch):
 
     auth = _import_fresh_auth_module(monkeypatch)
 
+    assert auth.DEFAULT_TEXT_MODEL == "qwen/qwen3.7-max"
+    assert auth.DEFAULT_IMAGE_MODEL == "x-ai/grok-imagine-image-quality"
+    assert auth.DEFAULT_VIDEO_MODEL == "kwaivgi/kling-v3.0-pro"
     assert auth.OPENROUTER_DEFAULT_TEXT_MODEL == auth.DEFAULT_TEXT_MODEL
     assert auth.OPENROUTER_DEFAULT_IMAGE_MODEL == auth.DEFAULT_IMAGE_MODEL
     assert auth.OPENROUTER_DEFAULT_VIDEO_MODEL == auth.DEFAULT_VIDEO_MODEL

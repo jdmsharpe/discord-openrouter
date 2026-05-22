@@ -114,9 +114,9 @@ python -m pip install -e ".[dev]"
 | `BOT_TOKEN` | **Yes** | Your Discord bot token |
 | `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs |
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
-| `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `moonshotai/kimi-k2.6`) |
-| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `openai/gpt-5.4-image-2`) |
-| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter-media video` (Default: `kwaivgi/kling-video-o1`) |
+| `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `qwen/qwen3.7-max`) |
+| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `x-ai/grok-imagine-image-quality`) |
+| `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter-media video` (Default: `kwaivgi/kling-v3.0-pro`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter-tools tts` (Default: `google/gemini-3.1-flash-tts-preview`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter-tools stt` (Default: `openai/gpt-audio`) |
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default engine for PDF attachments: `cloudflare-ai`, `mistral-ocr`, `native` |

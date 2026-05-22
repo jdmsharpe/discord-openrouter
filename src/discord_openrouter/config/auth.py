@@ -18,9 +18,9 @@ load_dotenv()
 
 TRUE_ENV_VALUES = frozenset({"true", "1", "yes"})
 REQUIRED_ENV_VARS = ("BOT_TOKEN", "OPENROUTER_API_KEY")
-DEFAULT_TEXT_MODEL = "moonshotai/kimi-k2.6"
-DEFAULT_IMAGE_MODEL = "openai/gpt-5.4-image-2"
-DEFAULT_VIDEO_MODEL = "kwaivgi/kling-video-o1"
+DEFAULT_TEXT_MODEL = "qwen/qwen3.7-max"
+DEFAULT_IMAGE_MODEL = "x-ai/grok-imagine-image-quality"
+DEFAULT_VIDEO_MODEL = "kwaivgi/kling-v3.0-pro"
 DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview"
 DEFAULT_STT_MODEL = "openai/gpt-audio"
 DEFAULT_PDF_ENGINE = None
