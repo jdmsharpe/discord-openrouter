@@ -90,6 +90,9 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.chat.calls[0]["tools"] == [{"type": "openrouter:web_search"}]
     assert instance.chat.calls[0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert instance.chat.calls[0]["reasoning"] == {"effort": "high"}
+    # OpenRouter deprecated `max_tokens`; the client sends the modern key instead.
+    assert instance.chat.calls[0]["max_completion_tokens"] == 256
+    assert "max_tokens" not in instance.chat.calls[0]
     assert payload["usage"]["total_tokens"] == 30
 
 
