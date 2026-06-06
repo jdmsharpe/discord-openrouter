@@ -192,7 +192,10 @@ class OpenRouterClient:
         if top_p is not None:
             request_kwargs["top_p"] = top_p
         if max_tokens is not None:
-            request_kwargs["max_tokens"] = max_tokens
+            # OpenRouter deprecated `max_tokens` in favor of `max_completion_tokens`
+            # (the SDK accepts both but documents `max_tokens` as deprecated). Send
+            # the modern key so we are not relying on the deprecated alias.
+            request_kwargs["max_completion_tokens"] = max_tokens
         reasoning_config = _build_reasoning_config(
             reasoning_effort=reasoning_effort,
             reasoning_max_tokens=reasoning_max_tokens,
