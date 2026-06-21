@@ -172,7 +172,7 @@ Try these multimodal and tool-assisted commands:
 - **Web Search:** `/openrouter chat web_search:true prompt:What changed in OpenRouter this week?`
 - **PDF Analysis:** `/openrouter chat prompt:Summarize this contract attachment:<pdf> pdf_engine:mistral-ocr`
 - **Video Analysis:** `/openrouter chat model:<video-model> prompt:What happens in this clip? attachment:<video>`
-- **Prompt Caching:** `/openrouter chat model:anthropic/claude-sonnet-4.5 prompt_cache_ttl:1h prompt:Use this rubric...`
+- **Prompt Caching:** `/openrouter chat model:anthropic/claude-sonnet-4.6 prompt_cache_ttl:1h prompt:Use this rubric...`
 - **Video Generation:** `/openrouter-media video prompt:A neon train racing through a rainy cyberpunk city at night`
 - **Video from Image:** `/openrouter-media video prompt:Animate this character walking forward attachment:<image>`
 
