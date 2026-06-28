@@ -14,14 +14,14 @@ authors = [
 ]
 dependencies = [
   "httpx~=0.28",
-  "openrouter~=0.10.0",
+  "openrouter~=0.10.8",
   "py-cord~=2.8",
   "python-dotenv~=1.2",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest~=9.0",
+  "pytest~=9.1",
   "pytest-asyncio~=1.4",
   "ruff~=0.15",
   "pyright~=1.1",

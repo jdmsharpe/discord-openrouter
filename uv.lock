@@ -213,10 +213,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = "~=0.28" },
-    { name = "openrouter", specifier = "~=0.10.0" },
+    { name = "openrouter", specifier = "~=0.10.8" },
     { name = "py-cord", specifier = "~=2.8" },
     { name = "pyright", marker = "extra == 'dev'", specifier = "~=1.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = "~=9.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = "~=9.1" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = "~=1.4" },
     { name = "python-dotenv", specifier = "~=1.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "~=0.15" },
@@ -520,7 +520,7 @@ wheels = [
 
 [[package]]
 name = "openrouter"
-version = "0.10.0"
+version = "0.10.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpcore" },
@@ -528,9 +528,9 @@ dependencies = [
     { name = "jsonpath-python" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/04/35/9d368e4f4780658556b21b7d911215822bfe3cc0da930d84505b7361c9b7/openrouter-0.10.0.tar.gz", hash = "sha256:04567dfc39f11f8e4ff693c966f338610bd3032ee7abceb4b71c99409b8a92e4", size = 317872, upload-time = "2026-06-17T13:50:30.628Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/4c/1fed3f4cbcf0962d8117b54f1740696c98d0dc2e3d5c34459d46effe8a3b/openrouter-0.10.8.tar.gz", hash = "sha256:ac7f4cea1ec1c2a063b0ad9792a8f64dde68ed053279b6c42bee849a50afc47c", size = 340259, upload-time = "2026-06-28T15:33:38.067Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/64/4166b81b5c8a899a80f457b7d340fa202df3083eac13cbe1cb6bede772a4/openrouter-0.10.0-py3-none-any.whl", hash = "sha256:0e318c1ea61fe1c78633dcef97440f43fca7322989d52e5bcea780fabd9150d6", size = 704688, upload-time = "2026-06-17T13:50:31.982Z" },
+    { url = "https://files.pythonhosted.org/packages/15/ae/76fc8ad57f6717e9231fbd7313e5623733d86f1a2149baa458772164f456/openrouter-0.10.8-py3-none-any.whl", hash = "sha256:ff9b3cd2f55a3f905d21f56517344da9f9556ffbd2cb9d31ddc388c4b930aab6", size = 748497, upload-time = "2026-06-28T15:33:36.627Z" },
 ]
 
 [[package]]
