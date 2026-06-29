@@ -18,9 +18,9 @@ load_dotenv()
 
 TRUE_ENV_VALUES = frozenset({"true", "1", "yes"})
 REQUIRED_ENV_VARS = ("BOT_TOKEN", "OPENROUTER_API_KEY")
-DEFAULT_TEXT_MODEL = "qwen/qwen3.7-max"
-DEFAULT_IMAGE_MODEL = "x-ai/grok-imagine-image-quality"
-DEFAULT_VIDEO_MODEL = "kwaivgi/kling-v3.0-pro"
+DEFAULT_TEXT_MODEL = "deepseek/deepseek-v4-flash"
+DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview"
+DEFAULT_VIDEO_MODEL = "alibaba/happyhorse-1.1"
 DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview"
 DEFAULT_STT_MODEL = "openai/gpt-audio"
 DEFAULT_PDF_ENGINE = None
