@@ -486,7 +486,7 @@ class OpenRouterCog(commands.Cog):
     @option("prompt", description="Prompt", required=True, type=str)
     @option(
         "model",
-        description=f"OpenRouter image model slug to use. (default: {OPENROUTER_DEFAULT_IMAGE_MODEL})",
+        description=f"Image model slug (must output images). Default: {OPENROUTER_DEFAULT_IMAGE_MODEL}",
         required=False,
         type=str,
     )

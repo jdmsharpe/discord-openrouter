@@ -116,7 +116,9 @@ async def run_image_command(
         )
     except OpenRouterApiError as error:
         await send_embed_batches(
-            ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
+            ctx.followup.send,
+            embed=error_embed(_friendly_image_error(str(error), resolved_model)),
+            logger=cog.logger,
         )
         return
     except Exception as error:
@@ -220,6 +222,24 @@ def _resolve_image_modalities(model_info) -> list[str]:
     if model_info is not None and "text" not in model_info.output_modalities:
         return ["image"]
     return ["image", "text"]
+
+
+def _friendly_image_error(message: str, model: str) -> str:
+    """Rewrite OpenRouter's raw modality-routing error into actionable guidance.
+
+    The catalog's ``output_modalities`` is a union across a model's providers, so
+    pre-flight validation can pass for a model whose actual endpoint serves only
+    text/chat. OpenRouter then rejects the image request with a raw
+    "No endpoints found that support the requested output modalities" message.
+    Surface a friendly hint naming a known-good image model instead.
+    """
+    lowered = message.lower()
+    if "no endpoints found" in lowered and "modalit" in lowered:
+        return (
+            f"`{model}` can't generate images — it has no image-output endpoint on OpenRouter. "
+            f"Pick an image-capable model (e.g. `{OPENROUTER_DEFAULT_IMAGE_MODEL}`)."
+        )
+    return message
 
 
 def _validate_image_model_modalities(model_info, *, requires_image_input: bool) -> str | None:
