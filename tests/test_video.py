@@ -161,9 +161,7 @@ class TestBuildPricingDetails:
         assert "1 output" in out and "1 outputs" not in out
 
     def test_plural_output(self):
-        out = _build_pricing_details(
-            aspect_ratio=None, resolution=None, size=None, output_count=3
-        )
+        out = _build_pricing_details(aspect_ratio=None, resolution=None, size=None, output_count=3)
         assert "3 outputs" in out
 
 
@@ -206,9 +204,7 @@ class TestPollUntilComplete:
     def test_returns_immediately_when_already_completed(self):
         cog = _make_cog()
         result = asyncio.run(
-            _poll_until_complete(
-                cog, job_id="j1", polling_url=None, initial_status="completed"
-            )
+            _poll_until_complete(cog, job_id="j1", polling_url=None, initial_status="completed")
         )
         assert result["status"] == "completed"
         cog.openrouter_client.get_video_generation.assert_not_awaited()
@@ -217,9 +213,7 @@ class TestPollUntilComplete:
         cog = _make_cog()
         with pytest.raises(OpenRouterApiError):
             asyncio.run(
-                _poll_until_complete(
-                    cog, job_id="j1", polling_url=None, initial_status="failed"
-                )
+                _poll_until_complete(cog, job_id="j1", polling_url=None, initial_status="failed")
             )
 
     def test_polls_until_completion(self):
@@ -244,13 +238,12 @@ class TestPollUntilComplete:
         cog.openrouter_client.get_video_generation = AsyncMock(
             return_value={"id": "j1", "status": "failed", "error": "model overloaded"}
         )
-        with patch(
-            "discord_openrouter.cogs.openrouter.video.asyncio.sleep", new=AsyncMock()
-        ), pytest.raises(OpenRouterApiError, match="model overloaded"):
+        with (
+            patch("discord_openrouter.cogs.openrouter.video.asyncio.sleep", new=AsyncMock()),
+            pytest.raises(OpenRouterApiError, match="model overloaded"),
+        ):
             asyncio.run(
-                _poll_until_complete(
-                    cog, job_id="j1", polling_url=None, initial_status="pending"
-                )
+                _poll_until_complete(cog, job_id="j1", polling_url=None, initial_status="pending")
             )
 
     def test_raises_timeout_when_elapsed_exceeds_limit(self):
@@ -261,15 +254,13 @@ class TestPollUntilComplete:
         # Patch the timeout to a negative value so the very first elapsed-time check fires.
         # Patching time.monotonic instead is unsafe: asyncio's event loop probes the clock
         # internally during setup, so a call-counter-based stub yields surprising values.
-        with patch(
-            "discord_openrouter.cogs.openrouter.video.asyncio.sleep", new=AsyncMock()
-        ), patch(
-            "discord_openrouter.cogs.openrouter.video.VIDEO_GENERATION_TIMEOUT_SECONDS", -1
-        ), pytest.raises(TimeoutError):
+        with (
+            patch("discord_openrouter.cogs.openrouter.video.asyncio.sleep", new=AsyncMock()),
+            patch("discord_openrouter.cogs.openrouter.video.VIDEO_GENERATION_TIMEOUT_SECONDS", -1),
+            pytest.raises(TimeoutError),
+        ):
             asyncio.run(
-                _poll_until_complete(
-                    cog, job_id="j1", polling_url=None, initial_status="pending"
-                )
+                _poll_until_complete(cog, job_id="j1", polling_url=None, initial_status="pending")
             )
 
 
@@ -309,9 +300,7 @@ class TestRunVideoCommand:
     def test_propagates_api_error_during_get_model(self):
         cog = _make_cog()
         ctx = _make_ctx()
-        cog.openrouter_client.get_model = AsyncMock(
-            side_effect=OpenRouterApiError("upstream auth")
-        )
+        cog.openrouter_client.get_model = AsyncMock(side_effect=OpenRouterApiError("upstream auth"))
         with patch("discord_openrouter.cogs.openrouter.video.error_embed") as error_embed_factory:
             self._run(cog, ctx, model="m")
         error_embed_factory.assert_called_once_with("upstream auth")

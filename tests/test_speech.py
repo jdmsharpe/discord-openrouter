@@ -123,18 +123,14 @@ class TestIsAudioAttachment:
         assert _is_audio_attachment(_make_attachment(content_type="text/plain")) is False
 
     def test_falls_back_to_extension_when_content_type_blank(self):
-        assert _is_audio_attachment(
-            _make_attachment(content_type=None, filename="clip.flac")
-        ) is True
-        assert _is_audio_attachment(
-            _make_attachment(content_type="", filename="clip.txt")
-        ) is False
+        assert (
+            _is_audio_attachment(_make_attachment(content_type=None, filename="clip.flac")) is True
+        )
+        assert _is_audio_attachment(_make_attachment(content_type="", filename="clip.txt")) is False
 
     def test_strips_charset_suffix_from_content_type(self):
         # Content-types may include "; charset=binary" or similar; the lookup must ignore that.
-        assert _is_audio_attachment(
-            _make_attachment(content_type="audio/wav; codecs=1")
-        ) is True
+        assert _is_audio_attachment(_make_attachment(content_type="audio/wav; codecs=1")) is True
 
 
 class TestAudioFormatForStt:
@@ -168,9 +164,7 @@ class TestRunTtsCommand:
         ctx = _make_ctx()
         oversized = "x" * (TTS_MAX_CHARS + 1)
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             send = self._run(cog, ctx, input_text=oversized)
 
         ctx.defer.assert_awaited_once()
@@ -186,9 +180,7 @@ class TestRunTtsCommand:
             "discord_openrouter.cogs.openrouter.speech.OPENROUTER_DEFAULT_TTS_MODEL", ""
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, input_text="hello")
 
         message = error_embed_factory.call_args.args[0]
@@ -204,9 +196,7 @@ class TestRunTtsCommand:
             )
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, input_text="hello", model="openai/gpt-text-only")
 
         message = error_embed_factory.call_args.args[0]
@@ -219,9 +209,7 @@ class TestRunTtsCommand:
             side_effect=OpenRouterApiError("upstream timeout")
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, input_text="hello", model="openai/tts-1")
 
         error_embed_factory.assert_called_once_with("upstream timeout")
@@ -231,17 +219,13 @@ class TestRunTtsCommand:
         cog = _make_cog()
         ctx = _make_ctx()
         cog.openrouter_client.get_model = AsyncMock(
-            return_value=ModelInfo(
-                id="openai/tts-1", name="tts", output_modalities=["audio"]
-            )
+            return_value=ModelInfo(id="openai/tts-1", name="tts", output_modalities=["audio"])
         )
         cog.openrouter_client.create_speech = AsyncMock(
             return_value={"audio_bytes": b"", "usage": {}}
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, input_text="hello", model="openai/tts-1")
 
         message = error_embed_factory.call_args.args[0]
@@ -252,9 +236,7 @@ class TestRunTtsCommand:
         ctx = _make_ctx()
         cog.channel_model_defaults[(900, 42, "tts")] = "openai/tts-1-hd"
         cog.openrouter_client.get_model = AsyncMock(
-            return_value=ModelInfo(
-                id="openai/tts-1-hd", name="tts-hd", output_modalities=["audio"]
-            )
+            return_value=ModelInfo(id="openai/tts-1-hd", name="tts-hd", output_modalities=["audio"])
         )
         # Stub create_speech to short-circuit on no-audio so we only verify routing.
         cog.openrouter_client.create_speech = AsyncMock(
@@ -279,9 +261,7 @@ class TestRunSttCommand:
         ctx = _make_ctx()
         attachment = _make_attachment(filename="doc.txt", content_type="text/plain")
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, attachment=attachment)
 
         message = error_embed_factory.call_args.args[0]
@@ -294,9 +274,7 @@ class TestRunSttCommand:
             "discord_openrouter.cogs.openrouter.speech.OPENROUTER_DEFAULT_STT_MODEL", ""
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, attachment=_make_attachment())
 
         message = error_embed_factory.call_args.args[0]
@@ -314,9 +292,7 @@ class TestRunSttCommand:
             )
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, attachment=_make_attachment(), model="text-only")
 
         message = error_embed_factory.call_args.args[0]
@@ -334,9 +310,7 @@ class TestRunSttCommand:
             )
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, attachment=_make_attachment(), model="audio-only")
 
         message = error_embed_factory.call_args.args[0]
@@ -349,9 +323,7 @@ class TestRunSttCommand:
             side_effect=OpenRouterApiError("upstream auth error")
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.speech.error_embed"
-        ) as error_embed_factory:
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
             self._run(cog, ctx, attachment=_make_attachment(), model="any/stt")
 
         error_embed_factory.assert_called_once_with("upstream auth error")

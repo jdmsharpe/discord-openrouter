@@ -27,9 +27,7 @@ DISCORD_MAX_STATIC_CHOICES = 25
 # Modules that define slash-command static choices. discord-openrouter keeps all
 # of them in command_options.py; model/voice menus are built dynamically from
 # OpenRouter's /v1/models endpoint, so there are no static model choice lists.
-CHOICE_MODULES = (
-    "discord_openrouter.cogs.openrouter.command_options",
-)
+CHOICE_MODULES = ("discord_openrouter.cogs.openrouter.command_options",)
 
 
 def _discover_choice_lists() -> list[tuple[str, str, list]]:
@@ -72,9 +70,7 @@ def test_choice_lists_were_discovered() -> None:
     _CHOICE_LISTS,
     ids=[f"{name}" for _, name, _ in _CHOICE_LISTS],
 )
-def test_choice_list_within_discord_cap(
-    module_name: str, list_name: str, choices: list
-) -> None:
+def test_choice_list_within_discord_cap(module_name: str, list_name: str, choices: list) -> None:
     count = len(choices)
     assert count <= DISCORD_MAX_STATIC_CHOICES, (
         f"{module_name}.{list_name} has {count} choices, exceeding Discord's "

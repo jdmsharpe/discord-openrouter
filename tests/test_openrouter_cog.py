@@ -43,7 +43,11 @@ def _make_ctx(*, channel_id: int | None = 100, user_id: int = 7) -> SimpleNamesp
 
 
 def _make_conversation(
-    *, conversation_id: int = 5, user_id: int = 7, channel_id: int = 100, model: str = "openai/gpt-4o-mini"
+    *,
+    conversation_id: int = 5,
+    user_id: int = 7,
+    channel_id: int = 100,
+    model: str = "openai/gpt-4o-mini",
 ) -> Conversation:
     return Conversation(
         conversation_id=conversation_id,
@@ -62,9 +66,7 @@ def _serialize_command_group_payload(group):
                 "name": command.name,
                 "description": command.description,
                 "options": [
-                    option.to_dict()
-                    for option in command.options
-                    if option.input_type is not None
+                    option.to_dict() for option in command.options if option.input_type is not None
                 ],
                 "type": 1,
                 "nsfw": False,
@@ -155,11 +157,14 @@ class TestCurrentModel:
         cog = _make_cog()
         ctx = _make_ctx()
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ) as send, patch(
-            "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
-        ) as build_embed:
+        with (
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
+            ) as send,
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
+            ) as build_embed,
+        ):
             asyncio.run(cog.current_model.callback(cog, ctx))
 
         build_embed.assert_called_once()
@@ -174,15 +179,19 @@ class TestCurrentModel:
         cog = _make_cog()
         conversation = _make_conversation(model="anthropic/claude-haiku")
         cog.conversation_histories[conversation.conversation_id] = conversation
-        ctx = _make_ctx(channel_id=conversation.channel_id, user_id=conversation.conversation_starter_id)
+        ctx = _make_ctx(
+            channel_id=conversation.channel_id, user_id=conversation.conversation_starter_id
+        )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ), patch(
-            "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
-        ) as build_embed, patch(
-            "discord_openrouter.cogs.openrouter.cog.describe_chat_settings",
-            return_value="model=anthropic/claude-haiku",
+        with (
+            patch("discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()),
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
+            ) as build_embed,
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.describe_chat_settings",
+                return_value="model=anthropic/claude-haiku",
+            ),
         ):
             asyncio.run(cog.current_model.callback(cog, ctx))
 
@@ -196,11 +205,12 @@ class TestCurrentModel:
         cog.channel_model_defaults[(100, 7, "chat")] = "moonshotai/kimi-k2"
         cog.channel_model_defaults[(100, 7, "image")] = "openai/dall-e-3"
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ), patch(
-            "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
-        ) as build_embed:
+        with (
+            patch("discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()),
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
+            ) as build_embed,
+        ):
             asyncio.run(cog.current_model.callback(cog, ctx))
 
         defaults = build_embed.call_args.kwargs["channel_defaults"]
@@ -210,11 +220,12 @@ class TestCurrentModel:
         cog = _make_cog()
         ctx = _make_ctx(channel_id=None)
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ), patch(
-            "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
-        ) as build_embed:
+        with (
+            patch("discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()),
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.build_current_model_embed"
+            ) as build_embed,
+        ):
             asyncio.run(cog.current_model.callback(cog, ctx))
 
         # Verifies channel_id=0 path doesn't blow up; no channel defaults.
@@ -225,9 +236,7 @@ class TestSwitchModel:
     @staticmethod
     def _patches():
         return (
-            patch(
-                "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-            ),
+            patch("discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()),
             patch("discord_openrouter.cogs.openrouter.cog.build_model_status_embed"),
         )
 
@@ -238,9 +247,7 @@ class TestSwitchModel:
         cog.openrouter_client.get_model = AsyncMock(return_value=model_info)
         send, build = self._patches()
         with send, build as build_status:
-            asyncio.run(
-                cog.switch_model.callback(cog, ctx, model="google/gemini-3-pro")
-            )
+            asyncio.run(cog.switch_model.callback(cog, ctx, model="google/gemini-3-pro"))
 
         assert cog.channel_model_defaults[(100, 7, "chat")] == "google/gemini-3-pro"
         description = build_status.call_args.kwargs["description"]
@@ -277,9 +284,7 @@ class TestSwitchModel:
         send, build = self._patches()
 
         with send, build:
-            asyncio.run(
-                cog.switch_model.callback(cog, ctx, model="x-ai/grok-4", scope="both")
-            )
+            asyncio.run(cog.switch_model.callback(cog, ctx, model="x-ai/grok-4", scope="both"))
 
         assert conversation.settings.model == "x-ai/grok-4"
         assert cog.channel_model_defaults[(100, 7, "chat")] == "x-ai/grok-4"
@@ -294,12 +299,18 @@ class TestSwitchModel:
         cog.openrouter_client.get_model = AsyncMock(return_value=model_info)
         send, build = self._patches()
 
-        with send, build, patch(
-            "discord_openrouter.cogs.openrouter.cog.prompt_cache_supported_for_model",
-            return_value=False,
+        with (
+            send,
+            build,
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.prompt_cache_supported_for_model",
+                return_value=False,
+            ),
         ):
             asyncio.run(
-                cog.switch_model.callback(cog, ctx, model="openai/gpt-4o-mini", scope="conversation")
+                cog.switch_model.callback(
+                    cog, ctx, model="openai/gpt-4o-mini", scope="conversation"
+                )
             )
 
         assert conversation.settings.prompt_cache_ttl is None
@@ -332,9 +343,7 @@ class TestSwitchModel:
         send, build = self._patches()
 
         with send, build as build_status:
-            asyncio.run(
-                cog.switch_model.callback(cog, ctx, model="  vendor/unknown-model  ")
-            )
+            asyncio.run(cog.switch_model.callback(cog, ctx, model="  vendor/unknown-model  "))
 
         # Whitespace stripped; channel default still set.
         assert cog.channel_model_defaults[(100, 7, "chat")] == "vendor/unknown-model"
@@ -344,15 +353,14 @@ class TestSwitchModel:
     def test_api_error_short_circuits_with_error_embed(self):
         cog = _make_cog()
         ctx = _make_ctx()
-        cog.openrouter_client.get_model = AsyncMock(
-            side_effect=OpenRouterApiError("rate limited")
-        )
+        cog.openrouter_client.get_model = AsyncMock(side_effect=OpenRouterApiError("rate limited"))
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ) as send, patch(
-            "discord_openrouter.cogs.openrouter.cog.error_embed"
-        ) as error_embed_factory:
+        with (
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
+            ) as send,
+            patch("discord_openrouter.cogs.openrouter.cog.error_embed") as error_embed_factory,
+        ):
             asyncio.run(cog.switch_model.callback(cog, ctx, model="any/model"))
 
         error_embed_factory.assert_called_once_with("rate limited")
@@ -369,11 +377,12 @@ class TestModels:
             side_effect=OpenRouterApiError("upstream down")
         )
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ) as send, patch(
-            "discord_openrouter.cogs.openrouter.cog.error_embed"
-        ) as error_embed_factory:
+        with (
+            patch(
+                "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
+            ) as send,
+            patch("discord_openrouter.cogs.openrouter.cog.error_embed") as error_embed_factory,
+        ):
             asyncio.run(cog.models.callback(cog, ctx))
 
         error_embed_factory.assert_called_once_with("upstream down")
@@ -384,10 +393,9 @@ class TestModels:
         ctx = _make_ctx()
         cog.openrouter_client.list_models = AsyncMock(return_value=[])
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ), patch(
-            "discord_openrouter.cogs.openrouter.cog.build_model_list_embed"
+        with (
+            patch("discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()),
+            patch("discord_openrouter.cogs.openrouter.cog.build_model_list_embed"),
         ):
             asyncio.run(
                 cog.models.callback(
@@ -414,10 +422,9 @@ class TestModels:
         ctx = _make_ctx()
         cog.openrouter_client.list_models = AsyncMock(return_value=[])
 
-        with patch(
-            "discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()
-        ), patch(
-            "discord_openrouter.cogs.openrouter.cog.build_model_list_embed"
+        with (
+            patch("discord_openrouter.cogs.openrouter.cog.send_embed_batches", new=AsyncMock()),
+            patch("discord_openrouter.cogs.openrouter.cog.build_model_list_embed"),
         ):
             asyncio.run(cog.models.callback(cog, ctx))
 
