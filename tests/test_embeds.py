@@ -2,8 +2,29 @@ import pytest
 
 pytest.importorskip("discord")
 
-from discord_openrouter.cogs.openrouter.embeds import append_flat_pricing_embed, append_usage_embed
+from discord_openrouter.cogs.openrouter.embeds import (
+    append_citations_embed,
+    append_flat_pricing_embed,
+    append_usage_embed,
+)
 from discord_openrouter.util import ChatUsage, ModelInfo, ModelPricing
+
+
+def test_long_citation_links_are_kept_complete_or_omitted():
+    first_url = "https://example.com/" + "a" * 3500
+    second_url = "https://example.org/" + "b" * 1000
+    embeds = []
+    append_citations_embed(
+        embeds,
+        [
+            {"title": "First", "url": first_url},
+            {"title": "Second", "url": second_url},
+        ],
+    )
+
+    assert f"[First]({first_url})" in embeds[0].description
+    assert second_url not in embeds[0].description
+    assert len(embeds[0].description) <= 4000
 
 
 def test_append_usage_embed_matches_compact_footer_convention():

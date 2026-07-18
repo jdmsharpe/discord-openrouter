@@ -15,6 +15,18 @@ from ...util import (
 )
 
 
+def _fit_markdown_entries(entries: list[str], max_length: int = 4000) -> str:
+    """Fit complete Markdown entries without slicing through links."""
+
+    accepted: list[str] = []
+    for entry in entries:
+        candidate = "\n".join([*accepted, entry])
+        if len(candidate) > max_length:
+            break
+        accepted.append(entry)
+    return "\n".join(accepted)
+
+
 def error_embed(description: str) -> Embed:
     return Embed(
         title="Error",
@@ -55,10 +67,14 @@ def append_citations_embed(embeds: list[Embed], citations: list[dict[str, str]])
     if not lines:
         return
 
+    description = _fit_markdown_entries(lines)
+    if not description:
+        return
+
     embeds.append(
         Embed(
             title="Sources",
-            description=truncate_text("\n".join(lines), 4000),
+            description=description,
             color=Colour.blue(),
         )
     )
