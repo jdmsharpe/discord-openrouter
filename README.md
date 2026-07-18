@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/github/v/tag/jdmsharpe/discord-openrouter?sort=semver&label=version)](https://github.com/jdmsharpe/discord-openrouter/tags)
 [![License](https://img.shields.io/github/license/jdmsharpe/discord-openrouter?label=license&v=2)](./LICENSE)
 [![CI](https://github.com/jdmsharpe/discord-openrouter/actions/workflows/main.yml/badge.svg)](https://github.com/jdmsharpe/discord-openrouter/actions/workflows/main.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/jsgreen152/discord-openrouter?logo=docker&logoColor=white)](https://hub.docker.com/r/jsgreen152/discord-openrouter)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 
 ## Overview
