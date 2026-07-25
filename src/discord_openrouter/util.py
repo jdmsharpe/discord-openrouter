@@ -90,8 +90,6 @@ class ChatSettings:
     context_compression: bool | None = None
     prompt_cache_ttl: str | None = None
     reasoning_effort: str | None = None
-    reasoning_max_tokens: int | None = None
-    exclude_reasoning: bool = False
     pdf_engine: str | None = None
 
 
@@ -435,12 +433,8 @@ def describe_chat_settings(settings: ChatSettings) -> str | None:
         parts.append("web search")
     if settings.datetime:
         parts.append("datetime")
-    if settings.reasoning_max_tokens is not None:
-        parts.append(f"reasoning `{settings.reasoning_max_tokens}` tokens")
-    elif settings.reasoning_effort:
+    if settings.reasoning_effort:
         parts.append(f"reasoning `{settings.reasoning_effort}`")
-    if settings.exclude_reasoning:
-        parts.append("hidden reasoning")
     if not parts:
         return None
     return ", ".join(parts)

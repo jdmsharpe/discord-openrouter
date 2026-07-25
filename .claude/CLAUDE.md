@@ -108,7 +108,11 @@ pytest -q
 
 ## Provider Notes
 
-- Chat uses the official `openrouter` Python SDK. Image, video, TTS/STT, and model listing go through raw `httpx` calls wrapped by `_request_with_retries` in `client.py` (exponential backoff + jitter on 429/500/502/503/504, respects `Retry-After` header).
+- Chat uses the official `openrouter` Python SDK. The typed request model `ChatRequestReasoning` declares only
+  `effort` and `summary`, and its generated serializer drops undeclared keys silently — so the `reasoning` object can carry an
+  effort and nothing else. `reasoning_max_tokens`/`exclude_reasoning` slash options were removed in v1.6.0 for exactly this
+  reason (they rendered in the settings embed but never reached the wire). `tests/test_openrouter_client.py::test_installed_sdk_still_models_only_effort_and_summary` fails if the SDK ever grows those fields, at which point the options
+  can be reinstated for real. Image, video, TTS/STT, and model listing go through raw `httpx` calls wrapped by `_request_with_retries` in `client.py` (exponential backoff + jitter on 429/500/502/503/504, respects `Retry-After` header).
 - Pricing is fetched **dynamically** from OpenRouter's `/v1/models` endpoint — there is no local `pricing.yaml` in this bot. Metadata is cached per `OPENROUTER_MODEL_CACHE_TTL_SECONDS`. See https://github.com/pydantic/genai-prices/blob/main/prices/providers/openrouter.yml for a third-party cross-reference of all 500+ OpenRouter model prices.
 - Conversation state is pruned on a 15-minute `tasks.loop`. `CONVERSATION_TTL`, `MAX_ACTIVE_CONVERSATIONS`, `VIEW_STATE_TTL`, and `DAILY_COST_RETENTION_DAYS` live in `cogs/openrouter/state.py`.
 - Every slash command enters via `cog_before_invoke` which binds a fresh request id via `discord_openrouter.logging_setup.bind_request_id`. `on_message` does the same for follow-up messages.

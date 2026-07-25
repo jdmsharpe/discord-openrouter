@@ -19,7 +19,7 @@ load_dotenv()
 TRUE_ENV_VALUES = frozenset({"true", "1", "yes"})
 REQUIRED_ENV_VARS = ("BOT_TOKEN", "OPENROUTER_API_KEY")
 DEFAULT_TEXT_MODEL = "deepseek/deepseek-v4-flash"
-DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image-preview"
+DEFAULT_IMAGE_MODEL = "google/gemini-3.1-flash-image"
 DEFAULT_VIDEO_MODEL = "alibaba/happyhorse-1.1"
 DEFAULT_TTS_MODEL = "google/gemini-3.1-flash-tts-preview"
 DEFAULT_STT_MODEL = "openai/gpt-audio"

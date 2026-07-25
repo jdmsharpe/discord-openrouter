@@ -33,7 +33,7 @@ Start a conversation with an OpenRouter model.
 
 - Features tool enablement mid-conversation via a dropdown.
 - Supports Anthropic-style prompt caching explicitly via `prompt_cache_ttl` (`5m` or `1h`).
-- Includes tuning options like `temperature`, `top_p`, `max_tokens`, `exclude_reasoning`, and `pdf_engine`.
+- Includes tuning options like `temperature`, `top_p`, `max_tokens`, `reasoning_effort`, and `pdf_engine`.
 
 ### `/openrouter-media image`
 
@@ -116,7 +116,7 @@ python -m pip install -e ".[dev]"
 | `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs |
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `deepseek/deepseek-v4-flash`) |
-| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `google/gemini-3.1-flash-image-preview`) |
+| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `google/gemini-3.1-flash-image`) |
 | `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter-media video` (Default: `alibaba/happyhorse-1.1`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter-tools tts` (Default: `google/gemini-3.1-flash-tts-preview`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter-tools stt` (Default: `openai/gpt-audio`) |
@@ -183,7 +183,6 @@ Try these multimodal and tool-assisted commands:
 - **Modality Support:** Although the bot handles normalized payloads, your selected model must actually support the requested input/output types. Use `/openrouter models` to check.
 - **Costs & Usage:** If OpenRouter returns `usage.cost`, the exact amount is displayed. If missing, the bot estimates it based on local pricing data and marks it with an `est.` prefix. Cache reads (`cached_tokens`) and writes (`cache_write_tokens`) are also displayed when reported.
 - **PDF History:** Assistant annotations are preserved in conversation history, meaning you can ask follow-up questions about the same PDF across multiple turns without re-uploading the document.
-- **Hidden Reasoning:** If a model supports hidden reasoning, you can pass `exclude_reasoning:true` in `/openrouter chat` to keep the model's thinking internal and out of the Discord response.
 
 ## Development
 

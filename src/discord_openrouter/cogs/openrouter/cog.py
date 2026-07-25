@@ -228,18 +228,6 @@ class OpenRouterCog(commands.Cog):
         choices=REASONING_EFFORT_CHOICES,
     )
     @option(
-        "reasoning_max_tokens",
-        description="Reasoning token budget for supported models. (default: not set)",
-        required=False,
-        type=int,
-    )
-    @option(
-        "exclude_reasoning",
-        description="Hide reasoning blocks while still using reasoning when supported. (default: false)",
-        required=False,
-        type=bool,
-    )
-    @option(
         "web_search",
         description="Enable OpenRouter web search for current information. (default: false)",
         required=False,
@@ -265,8 +253,6 @@ class OpenRouterCog(commands.Cog):
         context_compression: bool | None = None,
         prompt_cache_ttl: str | None = None,
         reasoning_effort: str | None = None,
-        reasoning_max_tokens: int | None = None,
-        exclude_reasoning: bool | None = None,
         web_search: bool | None = None,
         datetime: bool | None = None,
     ):
@@ -286,8 +272,6 @@ class OpenRouterCog(commands.Cog):
             web_search=bool(web_search),
             datetime=bool(datetime),
             reasoning_effort=reasoning_effort,
-            reasoning_max_tokens=reasoning_max_tokens,
-            exclude_reasoning=bool(exclude_reasoning),
         )
 
     @openrouter.command(

@@ -115,8 +115,6 @@ async def run_chat_command(
     web_search: bool = False,
     datetime: bool = False,
     reasoning_effort: str | None = None,
-    reasoning_max_tokens: int | None = None,
-    exclude_reasoning: bool = False,
 ) -> None:
     await ctx.defer()
 
@@ -149,20 +147,6 @@ async def run_chat_command(
     except ValueError as error:
         await send_embed_batches(
             ctx.followup.send, embed=error_embed(str(error)), logger=cog.logger
-        )
-        return
-    if reasoning_effort and reasoning_max_tokens is not None:
-        await send_embed_batches(
-            ctx.followup.send,
-            embed=error_embed("Use either `reasoning_effort` or `reasoning_max_tokens`, not both."),
-            logger=cog.logger,
-        )
-        return
-    if reasoning_max_tokens is not None and reasoning_max_tokens <= 0:
-        await send_embed_batches(
-            ctx.followup.send,
-            embed=error_embed("`reasoning_max_tokens` must be greater than zero."),
-            logger=cog.logger,
         )
         return
     prompt_cache_error = _validate_prompt_cache_request(
@@ -234,8 +218,6 @@ async def run_chat_command(
             web_search=web_search,
             datetime=datetime,
             reasoning_effort=reasoning_effort,
-            reasoning_max_tokens=reasoning_max_tokens,
-            exclude_reasoning=exclude_reasoning,
             pdf_engine=resolved_pdf_engine,
         ),
     )
@@ -412,8 +394,6 @@ async def _run_conversation_turn(
             top_p=conversation.settings.top_p,
             max_tokens=conversation.settings.max_tokens,
             reasoning_effort=conversation.settings.reasoning_effort,
-            reasoning_max_tokens=conversation.settings.reasoning_max_tokens,
-            exclude_reasoning=conversation.settings.exclude_reasoning,
             user=str(user_id),
             session_id=str(conversation.conversation_id),
         )

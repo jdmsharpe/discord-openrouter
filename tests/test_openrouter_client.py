@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import inspect
 from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import AsyncMock
@@ -96,7 +97,8 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert payload["usage"]["total_tokens"] == 30
 
 
-def test_create_chat_completion_supports_reasoning_budget_and_exclusion(monkeypatch):
+def test_create_chat_completion_sends_effort_only_reasoning(monkeypatch):
+    """Only `effort` reaches the wire — the SDK models nothing else."""
     client = OpenRouterClient(api_key="test-key")
     monkeypatch.setattr(
         client,
@@ -108,19 +110,15 @@ def test_create_chat_completion_supports_reasoning_budget_and_exclusion(monkeypa
         client.create_chat_completion(
             model="anthropic/claude-sonnet-4.5",
             messages=[{"role": "user", "content": "hello"}],
-            reasoning_max_tokens=2048,
-            exclude_reasoning=True,
+            reasoning_effort="high",
         )
     )
 
     instance = _FakeOpenRouter.instances[-1]
-    assert instance.chat.calls[0]["reasoning"] == {
-        "max_tokens": 2048,
-        "exclude": True,
-    }
+    assert instance.chat.calls[0]["reasoning"] == {"effort": "high"}
 
 
-def test_create_chat_completion_can_request_hidden_reasoning_only(monkeypatch):
+def test_create_chat_completion_omits_reasoning_without_effort(monkeypatch):
     client = OpenRouterClient(api_key="test-key")
     monkeypatch.setattr(
         client,
@@ -132,15 +130,27 @@ def test_create_chat_completion_can_request_hidden_reasoning_only(monkeypatch):
         client.create_chat_completion(
             model="openai/gpt-5.2",
             messages=[{"role": "user", "content": "hello"}],
-            exclude_reasoning=True,
         )
     )
 
     instance = _FakeOpenRouter.instances[-1]
-    assert instance.chat.calls[0]["reasoning"] == {
-        "exclude": True,
-        "enabled": True,
-    }
+    assert "reasoning" not in instance.chat.calls[0]
+
+
+def test_installed_sdk_still_models_only_effort_and_summary():
+    """Why reasoning_max_tokens/exclude_reasoning were removed as slash options.
+
+    `ChatRequestReasoning` declares exactly `effort` and `summary`, and the
+    generated serializer emits only declared fields — so a `max_tokens` or
+    `exclude` key was silently discarded before the request left the process
+    while the settings embed still advertised it.
+
+    If this test starts failing because the SDK grew those fields, the options
+    can be reinstated and wired through for real.
+    """
+    from openrouter.components import ChatRequestReasoning
+
+    assert set(ChatRequestReasoning.model_fields) == {"effort", "summary"}
 
 
 def test_request_headers_use_documented_openrouter_names():
@@ -549,3 +559,36 @@ def test_get_video_generation_and_download_file_bytes(monkeypatch):
     assert content_type == "video/mp4"
     assert _FakeAsyncClient.calls[0]["url"].endswith("/videos/job-123")
     assert _FakeAsyncClient.calls[1]["url"].endswith("/videos/job-123/content?index=0")
+
+
+def test_installed_openrouter_sdk_matches_client_usage():
+    # Every other SDK test swaps in `_FakeOpenRouter`, so nothing above would notice a
+    # breaking change in the real `openrouter` package. Pin the surface `client.py` drives.
+    openrouter_sdk = OpenRouterClient._import_openrouter_sdk()
+    sdk_client = openrouter_sdk.OpenRouter(
+        api_key="test-key",
+        http_referer="https://example.com",
+        x_open_router_title="discord-openrouter",
+    )
+
+    assert hasattr(sdk_client, "__aenter__")
+    assert hasattr(sdk_client, "__aexit__")
+    assert callable(sdk_client.chat.send_async)
+
+    parameters = inspect.signature(sdk_client.chat.send_async).parameters
+    for name in (
+        "model",
+        "messages",
+        "modalities",
+        "image_config",
+        "plugins",
+        "tools",
+        "cache_control",
+        "temperature",
+        "top_p",
+        "max_completion_tokens",
+        "reasoning",
+        "user",
+        "session_id",
+    ):
+        assert name in parameters, f"`{name}` is no longer accepted by chat.send_async"

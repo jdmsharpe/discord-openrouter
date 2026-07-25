@@ -161,8 +161,6 @@ class OpenRouterClient:
         top_p: float | None = None,
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
-        reasoning_max_tokens: int | None = None,
-        exclude_reasoning: bool = False,
         user: str | None = None,
         session_id: str | None = None,
     ) -> dict[str, Any]:
@@ -196,11 +194,7 @@ class OpenRouterClient:
             # (the SDK accepts both but documents `max_tokens` as deprecated). Send
             # the modern key so we are not relying on the deprecated alias.
             request_kwargs["max_completion_tokens"] = max_tokens
-        reasoning_config = _build_reasoning_config(
-            reasoning_effort=reasoning_effort,
-            reasoning_max_tokens=reasoning_max_tokens,
-            exclude_reasoning=exclude_reasoning,
-        )
+        reasoning_config = _build_reasoning_config(reasoning_effort=reasoning_effort)
         if reasoning_config is not None:
             request_kwargs["reasoning"] = reasoning_config
         if user:
@@ -564,23 +558,19 @@ def _build_tts_prompt(*, input_text: str, instructions: str | None) -> str:
     return f"{normalized_instructions}\n\nText to speak:\n{input_text}"
 
 
-def _build_reasoning_config(
-    *,
-    reasoning_effort: str | None,
-    reasoning_max_tokens: int | None,
-    exclude_reasoning: bool,
-) -> dict[str, Any] | None:
-    config: dict[str, Any] = {}
-    explicit_reasoning_control = bool(reasoning_effort) or reasoning_max_tokens is not None
-    if reasoning_effort:
-        config["effort"] = reasoning_effort
-    if reasoning_max_tokens is not None:
-        config["max_tokens"] = reasoning_max_tokens
-    if exclude_reasoning:
-        config["exclude"] = True
-        if not explicit_reasoning_control:
-            config["enabled"] = True
-    return config or None
+def _build_reasoning_config(*, reasoning_effort: str | None) -> dict[str, Any] | None:
+    """Build the `reasoning` request object.
+
+    Only `effort` is modelled here because that is all the typed SDK sends:
+    `components.ChatRequestReasoning` declares exactly `effort` and `summary`,
+    and its generated serializer emits only declared fields. A `max_tokens` or
+    `exclude` key added here would be silently discarded before the wire, which
+    is why the corresponding slash options were removed rather than left
+    reporting settings the API never receives.
+    """
+    if not reasoning_effort:
+        return None
+    return {"effort": reasoning_effort}
 
 
 def _casefolded(values: list[str]) -> set[str]:

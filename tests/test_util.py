@@ -300,12 +300,11 @@ def test_describe_chat_settings_summarizes_active_options():
             prompt_cache_ttl="1h",
             web_search=True,
             datetime=True,
-            reasoning_max_tokens=2048,
-            exclude_reasoning=True,
+            reasoning_effort="high",
         )
     )
 
     assert summary == (
         "pdf `mistral-ocr`, context compression off, prompt cache `1h`, "
-        "web search, datetime, reasoning `2048` tokens, hidden reasoning"
+        "web search, datetime, reasoning `high`"
     )
