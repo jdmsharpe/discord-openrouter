@@ -113,7 +113,7 @@ python -m pip install -e ".[dev]"
 | Variable | Required | Description |
 | --- | --- | --- |
 | `BOT_TOKEN` | **Yes** | Your Discord bot token |
-| `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs; if empty or unset, no slash commands are registered at all |
+| `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs |
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `deepseek/deepseek-v4-flash`) |
 | `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `google/gemini-3.1-flash-image`) |
