@@ -14,7 +14,7 @@ uv run python src/bot.py   # or: docker compose up --build
 | Variable | Required | Description |
 | --- | --- | --- |
 | `BOT_TOKEN` | Yes | Discord bot token |
-| `GUILD_IDS` | Yes | Comma-separated Discord guild IDs for slash command registration |
+| `GUILD_IDS` | Yes | Comma-separated Discord guild IDs for slash command registration; empty or unset registers no commands at all |
 | `OPENROUTER_API_KEY` | Yes | OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Default chat model when no channel or conversation default is set |
 | `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default for `/openrouter-media image` |
@@ -25,7 +25,7 @@ uv run python src/bot.py   # or: docker compose up --build
 | `OPENROUTER_SITE_URL` | No | App attribution header sent to OpenRouter for rankings |
 | `OPENROUTER_APP_NAME` | No | App attribution title |
 | `OPENROUTER_APP_CATEGORIES` | No | App attribution categories |
-| `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | How long to cache `/v1/models` metadata (default: 300) |
+| `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | How long to cache `/v1/models/user` metadata (default: 300) |
 | `SHOW_COST_EMBEDS` | No | Show token/cost embeds on responses (default: `true`; accepts `true/1/yes`) |
 | `LOG_FORMAT` | No | `text` (default) or `json` for structured JSON-lines output |
 
@@ -34,8 +34,8 @@ uv run python src/bot.py   # or: docker compose up --build
 ## Gotchas
 
 - Uses **`py-cord`** (not `discord.py`). The slash-command API differs; don't mix docs between the two.
-- `GUILD_IDS` empty → commands register globally (up to 1-hour propagation delay). Set it to a test guild ID during development for instant updates.
-- Unlike the other AI bots in this family, discord-openrouter does **not** ship a `pricing.yaml`. Pricing is fetched dynamically from OpenRouter's `/v1/models` endpoint and cached per `OPENROUTER_MODEL_CACHE_TTL_SECONDS`.
+- `GUILD_IDS` must list at least one guild ID; empty or unset registers the commands **nowhere** — not globally, not per-guild (`_parse_guild_ids("")` returns an empty list, not `None`, and py-cord only registers a command globally when `guild_ids is None`). Set it to a test guild ID during development for instant updates.
+- Unlike the other AI bots in this family, discord-openrouter does **not** ship a `pricing.yaml`. Pricing is fetched dynamically from OpenRouter's `/v1/models/user` endpoint (falling back to `/v1/models`) and cached per `OPENROUTER_MODEL_CACHE_TTL_SECONDS`.
 
 ## Supported Entry Points
 
@@ -112,8 +112,8 @@ pytest -q
   `effort` and `summary`, and its generated serializer drops undeclared keys silently — so the `reasoning` object can carry an
   effort and nothing else. `reasoning_max_tokens`/`exclude_reasoning` slash options were removed in v1.6.0 for exactly this
   reason (they rendered in the settings embed but never reached the wire). `tests/test_openrouter_client.py::test_installed_sdk_still_models_only_effort_and_summary` fails if the SDK ever grows those fields, at which point the options
-  can be reinstated for real. Image, video, TTS/STT, and model listing go through raw `httpx` calls wrapped by `_request_with_retries` in `client.py` (exponential backoff + jitter on 429/500/502/503/504, respects `Retry-After` header).
-- Pricing is fetched **dynamically** from OpenRouter's `/v1/models` endpoint — there is no local `pricing.yaml` in this bot. Metadata is cached per `OPENROUTER_MODEL_CACHE_TTL_SECONDS`. See https://github.com/pydantic/genai-prices/blob/main/prices/providers/openrouter.yml for a third-party cross-reference of all 500+ OpenRouter model prices.
+  can be reinstated for real. Video and model listing go through raw `httpx` calls wrapped by `_request_with_retries` in `client.py` (exponential backoff + jitter on 429/500/502/503/504, respects `Retry-After` header). Image and STT go through `create_chat_completion` on the typed SDK instead, and TTS streams over raw `httpx` in `_stream_audio_completion` with no retry wrapper.
+- Pricing is fetched **dynamically** from OpenRouter's `/v1/models/user` endpoint, falling back to `/v1/models` on 404/405/422 — there is no local `pricing.yaml` in this bot. Metadata is cached per `OPENROUTER_MODEL_CACHE_TTL_SECONDS`. See https://github.com/pydantic/genai-prices/blob/main/prices/providers/openrouter.yml for a third-party cross-reference of all 500+ OpenRouter model prices.
 - Conversation state is pruned on a 15-minute `tasks.loop`. `CONVERSATION_TTL`, `MAX_ACTIVE_CONVERSATIONS`, `VIEW_STATE_TTL`, and `DAILY_COST_RETENTION_DAYS` live in `cogs/openrouter/state.py`.
 - Every slash command enters via `cog_before_invoke` which binds a fresh request id via `discord_openrouter.logging_setup.bind_request_id`. `on_message` does the same for follow-up messages.
 - `LOG_FORMAT=json` switches log output to JSON lines suitable for log aggregators; leave unset for human-readable text mode.
