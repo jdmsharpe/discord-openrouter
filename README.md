@@ -39,7 +39,7 @@ Start a conversation with an OpenRouter model.
 - Features tool enablement mid-conversation via a dropdown.
 - Supports Anthropic-style prompt caching explicitly via `prompt_cache_ttl` (`5m` or `1h`).
 - Includes tuning options like `temperature`, `top_p`, `max_tokens`, `reasoning_effort`, and `pdf_engine`.
-- Rejects models that don't advertise text output (image-only, speech, transcription, video, embeddings, rerank) before any request is sent, pointing you to the matching `/openrouter-media` or `/openrouter-tools` command instead.
+- Rejects models that don't advertise text output (image-only, speech, transcription, video, embeddings, rerank) before any request is sent, pointing you to the matching `/openrouter-media` or `/openrouter-tools` command where one exists.
 
 ### `/openrouter-media image`
 
@@ -71,7 +71,7 @@ Generate text from an uploaded audio file.
 
 ### Utility Commands
 
-- **`/openrouter switch_model`:** Switch the active thread's model, save a per-channel default, or both (`scope=conversation`, `channel`, `both`).
+- **`/openrouter switch_model`:** Switch the active thread's model, save a per-channel default, or both (`scope=conversation`, `channel`, `both`). For the default `chat` modality it rejects models that don't advertise text output before changing anything, with the same error and command hints as `/openrouter chat`.
 - **`/openrouter models`:** Search the OpenRouter catalog natively with optional `input_modality` (`text`, `image`, `audio`, `video`, `file`) and `output_modality` (`text`, `image`, `audio`, `speech`, `video`, `embeddings`, `transcription`, `rerank`) filters. `audio` also matches the `speech` label OpenRouter gives dedicated TTS models; `speech` narrows to just those.
 - **`/openrouter current_model`:** View the active conversation model, saved channel default, and global fallback.
 - **`/openrouter check_permissions`:** Check if the bot has the necessary permissions in the current channel.
