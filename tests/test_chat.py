@@ -152,6 +152,46 @@ async def test_run_chat_command_rejects_non_text_output_model_before_request(
     assert cog.conversation_histories == {existing.conversation_id: existing}
 
 
+@pytest.mark.asyncio
+async def test_run_chat_command_cleans_up_existing_conversation_after_preflight():
+    """A valid replacement chat cleans up the old thread before starting the new turn."""
+    existing = Conversation(
+        conversation_id=444,
+        conversation_starter_id=7,
+        channel_id=100,
+        settings=ChatSettings(model="openai/gpt-4.1"),
+    )
+    cleanup = AsyncMock()
+    model_info = ModelInfo(
+        id="openai/gpt-4.1",
+        name="GPT-4.1",
+        output_modalities=["text"],
+    )
+    cog = SimpleNamespace(
+        logger=MagicMock(),
+        conversation_histories={existing.conversation_id: existing},
+        channel_model_defaults={},
+        _cleanup_conversation=cleanup,
+        openrouter_client=SimpleNamespace(get_model=AsyncMock(return_value=model_info)),
+    )
+    user = SimpleNamespace(id=7)
+    ctx = SimpleNamespace(
+        channel=SimpleNamespace(id=100),
+        user=user,
+        author=user,
+        defer=AsyncMock(),
+        followup=SimpleNamespace(send=AsyncMock()),
+        interaction=SimpleNamespace(id=555),
+    )
+
+    with patch.object(chat, "_run_conversation_turn", new=AsyncMock(return_value=True)) as run_turn:
+        await run_chat_command(cog, ctx=ctx, prompt="hello", model="gpt-4.1")
+
+    cleanup.assert_awaited_once_with(user.id, existing.conversation_id)
+    run_turn.assert_awaited_once()
+    assert run_turn.await_args.kwargs["conversation"].conversation_id == ctx.interaction.id
+
+
 def test_build_request_plugins_adds_pdf_parser_for_pdf_turns():
     plugins = _build_request_plugins(
         attachment_requirements=AttachmentRequirements(has_pdf=True),
