@@ -129,9 +129,6 @@ async def run_chat_command(
 
     user = ctx.user
     existing = find_active_conversation(cog, channel_id=channel.id, user_id=user.id)
-    if existing is not None:
-        await cog._cleanup_conversation(user.id, existing.conversation_id)
-
     resolved_model, model_info = await _resolve_model_for_request(
         cog,
         requested_model=model,
@@ -210,6 +207,9 @@ async def run_chat_command(
             logger=cog.logger,
         )
         return
+
+    if existing is not None:
+        await cog._cleanup_conversation(user.id, existing.conversation_id)
 
     conversation = Conversation(
         conversation_id=ctx.interaction.id,

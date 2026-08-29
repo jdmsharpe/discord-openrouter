@@ -109,10 +109,17 @@ async def test_run_chat_command_rejects_non_text_output_model_before_request(
     mixed_modality_models,
 ):
     """A fuzzy `model` query that lands on a TTS entry fails pre-flight, not at OpenRouter."""
+    existing = Conversation(
+        conversation_id=444,
+        conversation_starter_id=7,
+        channel_id=100,
+        settings=ChatSettings(model="openai/gpt-4.1"),
+    )
     cog = SimpleNamespace(
         logger=MagicMock(),
-        conversation_histories={},
+        conversation_histories={existing.conversation_id: existing},
         channel_model_defaults={},
+        _cleanup_conversation=AsyncMock(),
         openrouter_client=SimpleNamespace(
             get_model=AsyncMock(
                 return_value=mixed_modality_models["google/gemini-3.1-flash-tts-preview"]
@@ -141,7 +148,8 @@ async def test_run_chat_command_rejects_non_text_output_model_before_request(
     assert "/openrouter-tools tts" in message
     send.assert_awaited_once()
     cog.openrouter_client.create_chat_completion.assert_not_awaited()
-    assert cog.conversation_histories == {}
+    cog._cleanup_conversation.assert_not_awaited()
+    assert cog.conversation_histories == {existing.conversation_id: existing}
 
 
 def test_build_request_plugins_adds_pdf_parser_for_pdf_turns():
