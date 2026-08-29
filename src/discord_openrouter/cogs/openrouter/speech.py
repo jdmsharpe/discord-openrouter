@@ -21,6 +21,9 @@ from .embeds import append_flat_pricing_embed, error_embed
 from .state import track_daily_cost
 
 TTS_MAX_CHARS = 4096
+# OpenRouter labels TTS models' `architecture.output_modalities` as "speech"; only the
+# multimodal audio chat models (gpt-audio, lyria) advertise "audio". Accept either.
+TTS_OUTPUT_MODALITIES = frozenset({"audio", "speech"})
 STT_AUDIO_FORMAT_ALIASES = {
     "audio/mpeg": "mp3",
     "audio/mp3": "mp3",
@@ -83,7 +86,7 @@ async def run_tts_command(
         )
         return
 
-    if model_info is not None and "audio" not in model_info.output_modalities:
+    if model_info is not None and TTS_OUTPUT_MODALITIES.isdisjoint(model_info.output_modalities):
         await send_embed_batches(
             ctx.followup.send,
             embed=error_embed(

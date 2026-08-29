@@ -170,6 +170,8 @@ class OpenRouterClient:
             client_kwargs["http_referer"] = self.site_url
         if self.app_name:
             client_kwargs["x_open_router_title"] = self.app_name
+        if self.app_categories:
+            client_kwargs["x_open_router_categories"] = self.app_categories
 
         request_kwargs: dict[str, Any] = {
             "model": model,

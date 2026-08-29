@@ -53,6 +53,7 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
         api_key="test-key",
         site_url="https://example.com",
         app_name="discord-openrouter",
+        app_categories="productivity,discord bots",
     )
     monkeypatch.setattr(
         client,
@@ -82,6 +83,7 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.kwargs["api_key"] == "test-key"
     assert instance.kwargs["http_referer"] == "https://example.com"
     assert instance.kwargs["x_open_router_title"] == "discord-openrouter"
+    assert instance.kwargs["x_open_router_categories"] == "productivity,discord bots"
     assert instance.chat.calls[0]["model"] == "moonshotai/kimi-k2.6"
     assert instance.chat.calls[0]["modalities"] == ["image", "text"]
     assert instance.chat.calls[0]["image_config"] == {"aspect_ratio": "16:9", "image_size": "2K"}
@@ -95,6 +97,25 @@ def test_create_chat_completion_uses_sdk_and_reasoning(monkeypatch):
     assert instance.chat.calls[0]["max_completion_tokens"] == 256
     assert "max_tokens" not in instance.chat.calls[0]
     assert payload["usage"]["total_tokens"] == 30
+
+
+def test_create_chat_completion_omits_categories_when_unset(monkeypatch):
+    client = OpenRouterClient(api_key="test-key", site_url="https://example.com")
+    monkeypatch.setattr(
+        client,
+        "_import_openrouter_sdk",
+        lambda: SimpleNamespace(OpenRouter=_FakeOpenRouter),
+    )
+
+    asyncio.run(
+        client.create_chat_completion(
+            model="moonshotai/kimi-k2.6",
+            messages=[{"role": "user", "content": "hello"}],
+        )
+    )
+
+    instance = _FakeOpenRouter.instances[-1]
+    assert "x_open_router_categories" not in instance.kwargs
 
 
 def test_create_chat_completion_sends_effort_only_reasoning(monkeypatch):
@@ -569,6 +590,7 @@ def test_installed_openrouter_sdk_matches_client_usage():
         api_key="test-key",
         http_referer="https://example.com",
         x_open_router_title="discord-openrouter",
+        x_open_router_categories="productivity,discord bots",
     )
 
     assert hasattr(sdk_client, "__aenter__")

@@ -202,6 +202,26 @@ class TestRunTtsCommand:
         message = error_embed_factory.call_args.args[0]
         assert "does not advertise audio output" in message
 
+    def test_accepts_model_advertising_speech_output(self):
+        # The live catalog labels TTS models' output modality "speech", not "audio".
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=ModelInfo(id="openai/tts-1", name="tts", output_modalities=["speech"])
+        )
+        # Stub create_speech to short-circuit on no-audio so we only verify validation.
+        cog.openrouter_client.create_speech = AsyncMock(
+            return_value={"audio_bytes": b"", "usage": {}}
+        )
+
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
+            self._run(cog, ctx, input_text="hello", model="openai/tts-1")
+
+        cog.openrouter_client.create_speech.assert_awaited_once()
+        assert cog.openrouter_client.create_speech.await_args.kwargs["modalities"] == ["audio"]
+        message = error_embed_factory.call_args.args[0]
+        assert "no audio data" in message
+
     def test_propagates_api_error_during_get_model(self):
         cog = _make_cog()
         ctx = _make_ctx()
