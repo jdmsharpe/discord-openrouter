@@ -1,0 +1,231 @@
+{
+  "_source": "Real entries from keyless GET https://openrouter.ai/api/v1/models?output_modalities=all captured 2026-08-28, one per output-modality shape the live catalog uses; trimmed to the keys parse_model_info reads, descriptions cut to 160 chars.",
+  "data": [
+    {
+      "id": "bytedance-seed/seedream-5-0-pro",
+      "name": "ByteDance Seed: Seedream 5.0 Pro",
+      "canonical_slug": "bytedance-seed/seedream-5-0-pro-20260812",
+      "description": "Seedream 5.0 Pro is an image generation and editing model from ByteDance Seed. It is suited for commercial visual-production workflows that require precise edit",
+      "context_length": 0,
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "image"
+        ]
+      },
+      "pricing": {
+        "prompt": "0",
+        "completion": "0",
+        "image": "0.003",
+        "image_token": "0.0000107784431137725",
+        "image_output": "0.0000107784431137725"
+      }
+    },
+    {
+      "id": "openai/gpt-transcribe",
+      "name": "OpenAI: GPT Transcribe",
+      "canonical_slug": "openai/gpt-transcribe-20260805",
+      "description": "GPT Transcribe is a high-accuracy speech-to-text model from OpenAI. It is suited for recorded audio, streamed file transcription, and committed Realtime turns, ",
+      "context_length": 0,
+      "architecture": {
+        "input_modalities": [
+          "audio"
+        ],
+        "output_modalities": [
+          "transcription"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.0045",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "alibaba/happyhorse-1.1",
+      "name": "Alibaba: HappyHorse 1.1",
+      "canonical_slug": "alibaba/happyhorse-1.1-20260624",
+      "description": "HappyHorse 1.1 is a video generation model from Alibaba. It generates short videos from a text prompt, a single starting image, or a set of reference images, wi",
+      "context_length": 0,
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "video"
+        ]
+      },
+      "pricing": {
+        "prompt": "0",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "google/gemini-3.1-flash-image",
+      "name": "Google: Nano Banana 2 (Gemini 3.1 Flash Image)",
+      "canonical_slug": "google/gemini-3.1-flash-image-20260528",
+      "description": "Gemini 3.1 Flash Image, a.k.a. \"Nano Banana 2,\" is Google’s latest state of the art image generation and editing model, delivering Pro-level visual quality at F",
+      "context_length": 131072,
+      "architecture": {
+        "input_modalities": [
+          "image",
+          "text"
+        ],
+        "output_modalities": [
+          "image",
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.0000005",
+        "completion": "0.000003",
+        "image_output": "0.00006",
+        "web_search": "0.014"
+      }
+    },
+    {
+      "id": "google/gemini-embedding-2",
+      "name": "Google: Gemini Embedding 2",
+      "canonical_slug": "google/gemini-embedding-2",
+      "description": "Gemini Embedding 2 is Google's first multimodal embedding model. We currently support mapping text and images into a unified vector space for semantic search an",
+      "context_length": 8192,
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image",
+          "file",
+          "audio",
+          "video"
+        ],
+        "output_modalities": [
+          "embeddings"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.0000002",
+        "completion": "0",
+        "image": "0.00000045",
+        "audio": "0.0000065"
+      }
+    },
+    {
+      "id": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek: DeepSeek V4 Flash 0423",
+      "canonical_slug": "deepseek/deepseek-v4-flash-20260423",
+      "description": "DeepSeek V4 Flash is an efficiency-optimized Mixture-of-Experts model from DeepSeek with 284B total parameters and 13B activated parameters, supporting a 1M-tok",
+      "context_length": 1048576,
+      "architecture": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.00000008596",
+        "completion": "0.00000017192",
+        "input_cache_read": "0.000000017192"
+      }
+    },
+    {
+      "id": "google/gemini-3.1-flash-tts-preview",
+      "name": "Google: Gemini 3.1 Flash TTS Preview",
+      "canonical_slug": "google/gemini-3.1-flash-tts-preview",
+      "description": "Gemini 3.1 Flash TTS Preview is a text-to-speech model from Google, and a substantial generational step up from Gemini 2.5 Flash TTS. It takes text input and pr",
+      "context_length": 32768,
+      "architecture": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "speech"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.00002"
+      }
+    },
+    {
+      "id": "cohere/rerank-4-pro",
+      "name": "Cohere: Rerank 4 Pro",
+      "canonical_slug": "cohere/rerank-4-pro",
+      "description": "Cohere's AI search foundation model for enhancing the relevance of information surfaced within search and RAG systems. Features a 32K context window, multilingu",
+      "context_length": 32768,
+      "architecture": {
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "rerank"
+        ]
+      },
+      "pricing": {
+        "prompt": "0",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "openai/gpt-audio",
+      "name": "OpenAI: GPT Audio",
+      "canonical_slug": "openai/gpt-audio",
+      "description": "The gpt-audio model is OpenAI's first generally available audio model. The new snapshot features an upgraded decoder for more natural sounding voices and mainta",
+      "context_length": 128000,
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "audio"
+        ],
+        "output_modalities": [
+          "text",
+          "audio"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.0000025",
+        "completion": "0.00001",
+        "audio": "0.000032",
+        "audio_output": "0.000064"
+      }
+    },
+    {
+      "id": "anthropic/claude-sonnet-4.5",
+      "name": "Anthropic: Claude Sonnet 4.5",
+      "canonical_slug": "anthropic/claude-4.5-sonnet-20250929",
+      "description": "Claude Sonnet 4.5 is Anthropic’s most advanced Sonnet model to date, optimized for real-world agents and coding workflows. It delivers state-of-the-art performa",
+      "context_length": 1000000,
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image",
+          "file"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.000003",
+        "completion": "0.000015",
+        "web_search": "0.01",
+        "input_cache_read": "0.0000003",
+        "input_cache_write": "0.00000375",
+        "input_cache_write_1h": "0.000006",
+        "overrides": [
+          {
+            "min_prompt_tokens": 200000,
+            "prompt": "0.000006",
+            "completion": "0.0000225",
+            "input_cache_read": "0.0000006",
+            "input_cache_write": "0.0000075",
+            "input_cache_write_1h": "0.000012"
+          }
+        ]
+      }
+    }
+  ]
+}

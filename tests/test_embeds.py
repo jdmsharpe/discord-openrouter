@@ -6,6 +6,7 @@ from discord_openrouter.cogs.openrouter.embeds import (
     append_citations_embed,
     append_flat_pricing_embed,
     append_usage_embed,
+    build_model_list_embed,
 )
 from discord_openrouter.util import ChatUsage, ModelInfo, ModelPricing
 
@@ -260,3 +261,34 @@ def test_build_current_model_embed_omits_active_conversation_line_when_no_active
 
     desc = embed.description or ""
     assert "Active conversation" not in desc
+
+
+def test_build_model_list_embed_renders_every_live_output_modality(mixed_modality_models):
+    embed = build_model_list_embed(list(mixed_modality_models.values()), query=None)
+
+    assert embed.title == "Available Models"
+    for label in (
+        "out: text",
+        "out: image, text",
+        "out: image",
+        "out: speech",
+        "out: transcription",
+        "out: video",
+        "out: embeddings",
+        "out: rerank",
+        "out: text, audio",
+    ):
+        assert label in embed.description
+    # `context_length: 0` (transcription/video/image-only entries) renders as unknown, not "0".
+    assert (
+        "`openai/gpt-transcribe`\nOpenAI: GPT Transcribe | ctx unknown | in: audio | out: transcription"
+        in embed.description
+    )
+    assert len(embed.description) <= 4000
+
+    filtered = build_model_list_embed(
+        [mixed_modality_models["google/gemini-3.1-flash-tts-preview"]],
+        query=None,
+        output_modality="speech",
+    )
+    assert filtered.description.startswith("**Filters:** out=speech")

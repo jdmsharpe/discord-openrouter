@@ -21,6 +21,7 @@ from .chat import (
     handle_check_permissions,
     handle_on_message,
     run_chat_command,
+    validate_model_output_modalities,
 )
 from .chat import handle_new_message_in_conversation as handle_conversation_message
 from .chat import (
@@ -414,6 +415,17 @@ class OpenRouterCog(commands.Cog):
         lines = [f"**Resolved model:** `{resolved_model}`"]
 
         if resolved_modality == "chat":
+            # The catalog now lists image-only / speech / video / embeddings / rerank
+            # entries; refuse them here so an active conversation is never switched
+            # onto a model that chat completions cannot drive.
+            output_validation_error = validate_model_output_modalities(model_info)
+            if output_validation_error:
+                await send_embed_batches(
+                    ctx.followup.send,
+                    embed=error_embed(output_validation_error),
+                    logger=self.logger,
+                )
+                return
             if resolved_scope in {"conversation", "both"}:
                 if active_conversation is None:
                     if resolved_scope == "conversation":

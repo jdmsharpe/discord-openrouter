@@ -19,7 +19,7 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a 
 ## Features
 
 - **Multi-turn Conversations:** Persistent conversation history with interactive button controls (regenerate, pause/resume, stop) and explicit context compression to help long conversations fit smaller context windows.
-- **Multiple OpenRouter Models:** Seamlessly discover, query, and switch models on the fly using OpenRouter's expansive catalog. Save per-channel defaults or rely on global fallbacks.
+- **Multiple OpenRouter Models:** Seamlessly discover, query, and switch models on the fly using OpenRouter's expansive catalog. The catalog is fetched with `output_modalities=all`, so image, speech, transcription, video, embeddings, and rerank models are listed alongside the text models. Save per-channel defaults or rely on global fallbacks.
 - **Multimodal Input:** Supports text, images, PDFs, audio, video, and general file inputs using OpenRouter's normalized multimodal API. Features dedicated PDF parsing controls (`cloudflare-ai`, `mistral-ocr`, `native`).
 - **Advanced Tool Calling:** Built-in support for OpenRouter's server tools (`openrouter:web_search`, `openrouter:datetime`). Turn tools on or off mid-conversation via an interactive dropdown.
 - **Reasoning Configuration:** Customizable reasoning effort levels and token budgets for supported models. Automatically preserves `reasoning_details` in assistant messages so models can continue their chain-of-thought across turns.
@@ -39,6 +39,7 @@ Start a conversation with an OpenRouter model.
 - Features tool enablement mid-conversation via a dropdown.
 - Supports Anthropic-style prompt caching explicitly via `prompt_cache_ttl` (`5m` or `1h`).
 - Includes tuning options like `temperature`, `top_p`, `max_tokens`, `reasoning_effort`, and `pdf_engine`.
+- Rejects models that don't advertise text output (image-only, speech, transcription, video, embeddings, rerank) before any request is sent, pointing you to the matching `/openrouter-media` or `/openrouter-tools` command instead.
 
 ### `/openrouter-media image`
 
@@ -71,7 +72,7 @@ Generate text from an uploaded audio file.
 ### Utility Commands
 
 - **`/openrouter switch_model`:** Switch the active thread's model, save a per-channel default, or both (`scope=conversation`, `channel`, `both`).
-- **`/openrouter models`:** Search the OpenRouter catalog natively with optional `input_modality` and `output_modality` filters.
+- **`/openrouter models`:** Search the OpenRouter catalog natively with optional `input_modality` (`text`, `image`, `audio`, `video`, `file`) and `output_modality` (`text`, `image`, `audio`, `speech`, `video`, `embeddings`, `transcription`, `rerank`) filters. `audio` also matches the `speech` label OpenRouter gives dedicated TTS models; `speech` narrows to just those.
 - **`/openrouter current_model`:** View the active conversation model, saved channel default, and global fallback.
 - **`/openrouter check_permissions`:** Check if the bot has the necessary permissions in the current channel.
 
@@ -129,7 +130,7 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_SITE_URL` | No | Optional `HTTP-Referer` sent to OpenRouter |
 | `OPENROUTER_APP_NAME` | No | Optional app name sent as `X-OpenRouter-Title` header |
 | `OPENROUTER_APP_CATEGORIES` | No | Optional categories sent as `X-OpenRouter-Categories` |
-| `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | Seconds to cache model metadata (Default: `300`) |
+| `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | Seconds to cache the model catalog fetched from `/models/user?output_modalities=all` (Default: `300`) |
 | `SHOW_COST_EMBEDS` | No | Show usage/cost embeds (Default: `true`) |
 | `LOG_FORMAT` | No | `text` (default) for human-readable logs, or `json` for structured JSON-lines output with per-request IDs |
 
@@ -185,7 +186,7 @@ Try these multimodal and tool-assisted commands:
 ### Troubleshooting & Notes
 
 - **Attachment Limits:** The bot currently rejects Discord attachments larger than `20 MiB`.
-- **Modality Support:** Although the bot handles normalized payloads, your selected model must actually support the requested input/output types. Use `/openrouter models` to check.
+- **Modality Support:** Although the bot handles normalized payloads, your selected model must actually support the requested input/output types. Use `/openrouter models` to check. Every command validates the resolved model against the catalog up front: `/openrouter chat` requires text output, `/openrouter-media image` image output, `/openrouter-media video` video output, `/openrouter-tools tts` `audio` or `speech` output, and `/openrouter-tools stt` audio input plus text output (dedicated `transcription` models are rejected, since STT runs through chat completions).
 - **Costs & Usage:** If OpenRouter returns `usage.cost`, the exact amount is displayed. If missing, the bot estimates it based on local pricing data and marks it with an `est.` prefix. Cache reads (`cached_tokens`) and writes (`cache_write_tokens`) are also displayed when reported.
 - **PDF History:** Assistant annotations are preserved in conversation history, meaning you can ask follow-up questions about the same PDF across multiple turns without re-uploading the document.
 

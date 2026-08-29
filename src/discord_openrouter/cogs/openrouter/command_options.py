@@ -74,12 +74,18 @@ MODEL_INPUT_MODALITY_CHOICES = [
     OptionChoice(name="File Input", value="file"),
 ]
 
+# One choice per `architecture.output_modalities` value the live catalog uses. "Audio Output"
+# also matches the "speech" label (OUTPUT_MODALITY_FILTER_ALIASES in client.py); "Speech Output"
+# narrows to the dedicated TTS models.
 MODEL_OUTPUT_MODALITY_CHOICES = [
     OptionChoice(name="Text Output", value="text"),
     OptionChoice(name="Image Output", value="image"),
     OptionChoice(name="Audio Output", value="audio"),
+    OptionChoice(name="Speech Output", value="speech"),
     OptionChoice(name="Video Output", value="video"),
     OptionChoice(name="Embeddings Output", value="embeddings"),
+    OptionChoice(name="Transcription Output", value="transcription"),
+    OptionChoice(name="Rerank Output", value="rerank"),
 ]
 
 PDF_ENGINE_CHOICES = [

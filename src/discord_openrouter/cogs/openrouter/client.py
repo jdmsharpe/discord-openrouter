@@ -31,6 +31,16 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 MAX_API_ATTEMPTS = 5
 INITIAL_RETRY_DELAY_SECONDS = 0.5
 RETRY_JITTER_RATIO = 0.25
+# Both listing endpoints return text-output models only unless asked otherwise
+# (openapi.json: "Returns text-output models by default"), so every catalog fetch
+# passes this or image/video/TTS models never reach `get_model` and the `/models` search.
+MODEL_LIST_PARAMS: dict[str, str] = {"output_modalities": "all"}
+# `/openrouter models output_modality:audio` should surface TTS models too: the catalog labels
+# dedicated TTS models "speech" and only the multimodal audio chat models (gpt-audio, lyria)
+# "audio" -- the same split `TTS_OUTPUT_MODALITIES` in speech.py accepts.
+OUTPUT_MODALITY_FILTER_ALIASES: dict[str, frozenset[str]] = {
+    "audio": frozenset({"audio", "speech"}),
+}
 
 logger = logging.getLogger(__name__)
 
@@ -347,10 +357,13 @@ class OpenRouterClient:
                 if input_modality.casefold() in _casefolded(model.input_modalities)
             ]
         if output_modality:
+            wanted_outputs = OUTPUT_MODALITY_FILTER_ALIASES.get(
+                output_modality.casefold(), frozenset({output_modality.casefold()})
+            )
             models = [
                 model
                 for model in models
-                if output_modality.casefold() in _casefolded(model.output_modalities)
+                if not wanted_outputs.isdisjoint(_casefolded(model.output_modalities))
             ]
         if not query:
             return sorted(models, key=lambda model: model.name.casefold())[:limit]
@@ -433,6 +446,7 @@ class OpenRouterClient:
             f"{OPENROUTER_BASE_URL}/models/user",
             timeout=30.0,
             headers=self._request_headers(),
+            params=MODEL_LIST_PARAMS,
         )
         if response.status_code in {404, 405, 422}:
             response = await _request_with_retries(
@@ -440,7 +454,7 @@ class OpenRouterClient:
                 f"{OPENROUTER_BASE_URL}/models",
                 timeout=30.0,
                 headers=self._request_headers(),
-                params={"output_modalities": "all"},
+                params=MODEL_LIST_PARAMS,
             )
 
         if response.status_code >= 400:

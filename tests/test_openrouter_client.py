@@ -312,9 +312,98 @@ def test_fetch_models_fallback_requests_all_modalities(monkeypatch):
 
     assert [model.id for model in models] == ["openai/gpt-image-1"]
     assert _FakeAsyncClient.calls[0]["url"].endswith("/models/user")
-    assert _FakeAsyncClient.calls[0]["params"] is None
+    assert _FakeAsyncClient.calls[0]["params"] == {"output_modalities": "all"}
     assert _FakeAsyncClient.calls[1]["url"].endswith("/models")
     assert _FakeAsyncClient.calls[1]["params"] == {"output_modalities": "all"}
+
+
+def test_fetch_models_primary_requests_all_modalities(monkeypatch, mixed_modality_catalog):
+    """`/models/user` defaults to text-output models, so the filter goes on the first call too."""
+
+    class _FakeHttpResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _FakeAsyncClient:
+        calls: ClassVar[list] = []
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, *, headers=None, params=None, json=None):
+            self.calls.append({"method": method, "url": url, "params": params})
+            return _FakeHttpResponse(200, {"data": mixed_modality_catalog})
+
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
+    )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
+
+    client = OpenRouterClient(api_key="test-key")
+    models = asyncio.run(client._fetch_models_from_api())
+
+    assert len(_FakeAsyncClient.calls) == 1
+    assert _FakeAsyncClient.calls[0]["url"].endswith("/models/user")
+    assert _FakeAsyncClient.calls[0]["params"] == client_module.MODEL_LIST_PARAMS
+    assert _FakeAsyncClient.calls[0]["params"] == {"output_modalities": "all"}
+    assert [model.id for model in models] == [entry["id"] for entry in mixed_modality_catalog]
+    assert {"speech", "transcription", "video", "embeddings", "rerank"} <= {
+        modality for model in models for modality in model.output_modalities
+    }
+
+
+def test_list_models_output_filters_cover_every_live_modality(mixed_modality_models):
+    client = OpenRouterClient(api_key="test-key", model_cache_ttl_seconds=300)
+    client._fetch_models_from_api = AsyncMock(return_value=list(mixed_modality_models.values()))
+
+    async def run_filters():
+        results = {}
+        for output_modality in (
+            "text",
+            "image",
+            "audio",
+            "speech",
+            "video",
+            "embeddings",
+            "transcription",
+            "rerank",
+        ):
+            models = await client.list_models(output_modality=output_modality, limit=50)
+            results[output_modality] = sorted(model.id for model in models)
+        return results
+
+    results = asyncio.run(run_filters())
+
+    assert results["text"] == [
+        "anthropic/claude-sonnet-4.5",
+        "deepseek/deepseek-v4-flash",
+        "google/gemini-3.1-flash-image",
+        "openai/gpt-audio",
+    ]
+    assert results["image"] == [
+        "bytedance-seed/seedream-5-0-pro",
+        "google/gemini-3.1-flash-image",
+    ]
+    # "audio" also surfaces the dedicated TTS models, which the catalog labels "speech".
+    assert results["audio"] == ["google/gemini-3.1-flash-tts-preview", "openai/gpt-audio"]
+    assert results["speech"] == ["google/gemini-3.1-flash-tts-preview"]
+    assert results["video"] == ["alibaba/happyhorse-1.1"]
+    assert results["embeddings"] == ["google/gemini-embedding-2"]
+    assert results["transcription"] == ["openai/gpt-transcribe"]
+    assert results["rerank"] == ["cohere/rerank-4-pro"]
+    client._fetch_models_from_api.assert_awaited_once()
 
 
 class _AsyncLineIterator:

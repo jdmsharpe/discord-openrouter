@@ -20,6 +20,7 @@ from discord_openrouter.cogs.openrouter.video import (
     _validate_video_model_modalities,
     run_video_command,
 )
+from discord_openrouter.config import DEFAULT_VIDEO_MODEL
 from discord_openrouter.util import ModelInfo
 
 
@@ -83,6 +84,29 @@ class TestValidateVideoModelModalities:
 
     def test_returns_none_when_model_unknown(self):
         assert _validate_video_model_modalities(None, requires_image_input=True) is None
+
+    def test_default_video_model_from_live_catalog_passes(self, mixed_modality_models):
+        # Video-only entries reach the catalog now that listing passes output_modalities=all,
+        # so this check runs for real against the default model's entry.
+        assert DEFAULT_VIDEO_MODEL in mixed_modality_models
+        info = mixed_modality_models[DEFAULT_VIDEO_MODEL]
+        assert _validate_video_model_modalities(info, requires_image_input=False) is None
+        assert _validate_video_model_modalities(info, requires_image_input=True) is None
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "deepseek/deepseek-v4-flash",
+            "bytedance-seed/seedream-5-0-pro",
+            "google/gemini-3.1-flash-tts-preview",
+        ],
+    )
+    def test_blocks_live_models_without_video_output(self, mixed_modality_models, model_id):
+        error = _validate_video_model_modalities(
+            mixed_modality_models[model_id], requires_image_input=False
+        )
+        assert error is not None
+        assert f"`{model_id}` does not advertise video output" in error
 
 
 class TestIsImageAttachment:
@@ -314,3 +338,18 @@ class TestRunVideoCommand:
         with patch("discord_openrouter.cogs.openrouter.video.error_embed") as error_embed_factory:
             self._run(cog, ctx, model="t")
         assert "video output" in error_embed_factory.call_args.args[0]
+
+    def test_default_video_model_from_live_catalog_reaches_submit(self, mixed_modality_models):
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=mixed_modality_models[DEFAULT_VIDEO_MODEL]
+        )
+        # Short-circuit after validation so the poll loop never starts.
+        cog.openrouter_client.create_video_generation = AsyncMock(
+            side_effect=OpenRouterApiError("quota exceeded")
+        )
+        with patch("discord_openrouter.cogs.openrouter.video.error_embed") as error_embed_factory:
+            self._run(cog, ctx, model=DEFAULT_VIDEO_MODEL)
+        cog.openrouter_client.create_video_generation.assert_awaited_once()
+        error_embed_factory.assert_called_once_with("quota exceeded")

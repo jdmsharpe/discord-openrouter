@@ -23,6 +23,7 @@ from discord_openrouter.cogs.openrouter.image import (
     build_image_files,
     run_image_command,
 )
+from discord_openrouter.config import DEFAULT_IMAGE_MODEL
 from discord_openrouter.util import ModelInfo
 
 
@@ -278,3 +279,55 @@ class TestRunImageCommand:
         with patch("discord_openrouter.cogs.openrouter.image.error_embed") as error_embed_factory:
             self._run(cog, ctx, prompt="a cat", model="any/model")
         error_embed_factory.assert_called_once_with("upstream timeout")
+
+    def test_default_image_model_from_live_catalog_passes_validation(self, mixed_modality_models):
+        # Image-only entries reach the catalog now that listing passes output_modalities=all;
+        # the default image model (image+text) was already listed, so this pins that the
+        # pre-flight check accepts its real entry.
+        assert DEFAULT_IMAGE_MODEL in mixed_modality_models
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=mixed_modality_models[DEFAULT_IMAGE_MODEL]
+        )
+        cog.openrouter_client.create_chat_completion = AsyncMock(
+            return_value={"choices": [{"message": {"role": "assistant", "content": ""}}]}
+        )
+        with patch("discord_openrouter.cogs.openrouter.image.error_embed") as error_embed_factory:
+            self._run(cog, ctx, prompt="a cat", model=DEFAULT_IMAGE_MODEL)
+        cog.openrouter_client.create_chat_completion.assert_awaited_once()
+        kwargs = cog.openrouter_client.create_chat_completion.await_args.kwargs
+        assert kwargs["modalities"] == ["image", "text"]
+        assert "no images were returned" in error_embed_factory.call_args.args[0]
+
+    def test_image_only_live_model_requests_image_modality_alone(self, mixed_modality_models):
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=mixed_modality_models["bytedance-seed/seedream-5-0-pro"]
+        )
+        cog.openrouter_client.create_chat_completion = AsyncMock(
+            return_value={"choices": [{"message": {"role": "assistant", "content": ""}}]}
+        )
+        with patch("discord_openrouter.cogs.openrouter.image.error_embed"):
+            self._run(cog, ctx, prompt="a cat", model="bytedance-seed/seedream-5-0-pro")
+        kwargs = cog.openrouter_client.create_chat_completion.await_args.kwargs
+        assert kwargs["modalities"] == ["image"]
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "deepseek/deepseek-v4-flash",
+            "google/gemini-3.1-flash-tts-preview",
+            "alibaba/happyhorse-1.1",
+        ],
+    )
+    def test_rejects_live_models_without_image_output(self, mixed_modality_models, model_id):
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(return_value=mixed_modality_models[model_id])
+        with patch("discord_openrouter.cogs.openrouter.image.error_embed") as error_embed_factory:
+            self._run(cog, ctx, prompt="a cat", model=model_id)
+        message = error_embed_factory.call_args.args[0]
+        assert f"`{model_id}` does not advertise image output" in message
+        cog.openrouter_client.create_chat_completion.assert_not_awaited()

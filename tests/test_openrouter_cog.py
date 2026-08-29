@@ -9,8 +9,12 @@ import pytest
 
 pytest.importorskip("discord")
 
-from discord_openrouter.cogs.openrouter.client import OpenRouterApiError
+from discord_openrouter.cogs.openrouter.client import OpenRouterApiError, OpenRouterClient
 from discord_openrouter.cogs.openrouter.cog import OpenRouterCog
+from discord_openrouter.cogs.openrouter.command_options import (
+    MODEL_INPUT_MODALITY_CHOICES,
+    MODEL_OUTPUT_MODALITY_CHOICES,
+)
 from discord_openrouter.util import ChatSettings, Conversation, ModelInfo
 
 
@@ -254,6 +258,34 @@ class TestSwitchModel:
         assert "no active conversation" in description
         assert "Channel default" in description
 
+    def test_chat_scope_conversation_rejects_non_text_output_model(self):
+        """A speech-only catalog entry must not be written onto an active chat."""
+        cog = _make_cog()
+        ctx = _make_ctx()
+        conversation = _make_conversation()
+        cog.conversation_histories[conversation.conversation_id] = conversation
+        original_model = conversation.settings.model
+        model_info = ModelInfo(
+            id="google/gemini-3.1-flash-tts-preview",
+            name="Gemini 3.1 Flash TTS",
+            output_modalities=["speech"],
+        )
+        cog.openrouter_client.get_model = AsyncMock(return_value=model_info)
+        send, build = self._patches()
+        error = patch("discord_openrouter.cogs.openrouter.cog.error_embed")
+
+        with send, build as build_status, error as error_embed_factory:
+            asyncio.run(
+                cog.switch_model.callback(cog, ctx, model="gemini flash tts", scope="conversation")
+            )
+
+        assert conversation.settings.model == original_model
+        assert cog.channel_model_defaults == {}
+        build_status.assert_not_called()
+        message = error_embed_factory.call_args.args[0]
+        assert "does not advertise text output" in message
+        assert "/openrouter-tools tts" in message
+
     def test_chat_scope_conversation_with_active_conversation(self):
         cog = _make_cog()
         ctx = _make_ctx()
@@ -431,3 +463,41 @@ class TestModels:
         kwargs = cog.openrouter_client.list_models.await_args.kwargs
         assert kwargs["limit"] == 10
         assert kwargs["refresh"] is False
+
+    def test_every_modality_filter_choice_matches_a_live_catalog_entry(self, mixed_modality_models):
+        """No `/openrouter models` filter choice may be dead against the real catalog shapes."""
+        client = OpenRouterClient(api_key="test-key")
+        client._fetch_models_from_api = AsyncMock(return_value=list(mixed_modality_models.values()))
+
+        async def collect():
+            outputs = {
+                choice.value: [
+                    model.id
+                    for model in await client.list_models(output_modality=choice.value, limit=50)
+                ]
+                for choice in MODEL_OUTPUT_MODALITY_CHOICES
+            }
+            inputs = {
+                choice.value: [
+                    model.id
+                    for model in await client.list_models(input_modality=choice.value, limit=50)
+                ]
+                for choice in MODEL_INPUT_MODALITY_CHOICES
+            }
+            return outputs, inputs
+
+        outputs, inputs = asyncio.run(collect())
+
+        assert set(outputs) == {
+            "text",
+            "image",
+            "audio",
+            "speech",
+            "video",
+            "embeddings",
+            "transcription",
+            "rerank",
+        }
+        assert set(inputs) == {"text", "image", "audio", "video", "file"}
+        assert all(outputs.values()), {value: ids for value, ids in outputs.items() if not ids}
+        assert all(inputs.values()), {value: ids for value, ids in inputs.items() if not ids}

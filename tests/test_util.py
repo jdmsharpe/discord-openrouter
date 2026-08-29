@@ -15,6 +15,7 @@ from discord_openrouter.util import (
     calculate_cost,
     calculate_cost_breakdown,
     describe_chat_settings,
+    describe_modalities,
     extract_reasoning_text,
     extract_url_citations,
     extract_usage,
@@ -171,6 +172,49 @@ def test_parse_model_info_reads_extended_pricing_fields():
     assert model.pricing.internal_reasoning == 0.7
     assert model.pricing.input_cache_read == 0.8
     assert model.pricing.input_cache_write == 0.9
+
+
+def test_parse_model_info_handles_every_live_output_modality(mixed_modality_catalog):
+    """Every entry shape from the enlarged catalog parses and prices cleanly.
+
+    Both listing calls pass ``output_modalities=all`` (``MODEL_LIST_PARAMS``), so
+    image-only, speech, transcription, video, embeddings, and rerank entries reach
+    this parser for the first time. The fixture holds one real entry per shape.
+    """
+    parsed = {entry["id"]: parse_model_info(entry) for entry in mixed_modality_catalog}
+
+    assert {tuple(model.output_modalities) for model in parsed.values()} == {
+        ("text",),
+        ("image", "text"),
+        ("image",),
+        ("speech",),
+        ("transcription",),
+        ("video",),
+        ("embeddings",),
+        ("rerank",),
+        ("text", "audio"),
+    }
+    for model in parsed.values():
+        assert model.id and model.name and model.canonical_slug and model.description
+        assert calculate_cost(model, ChatUsage(prompt_tokens=10, completion_tokens=5)) is not None
+        assert describe_modalities(model).startswith("in: ")
+
+    # Media entries price per image/request under keys the parser does not model
+    # (`image_token`, `image_output`, `audio_output`) while `prompt`/`completion` are "0".
+    seedream = parsed["bytedance-seed/seedream-5-0-pro"]
+    assert (seedream.pricing.prompt, seedream.pricing.completion, seedream.pricing.image) == (
+        0.0,
+        0.0,
+        0.003,
+    )
+    assert seedream.context_length == 0
+    assert parsed["alibaba/happyhorse-1.1"].pricing == ModelPricing()
+    assert parsed["openai/gpt-transcribe"].input_modalities == ["audio"]
+    assert parsed["openai/gpt-transcribe"].pricing.prompt == 0.0045
+    assert parsed["google/gemini-embedding-2"].pricing.audio == 0.0000065
+    assert parsed["openai/gpt-audio"].pricing.audio == 0.000032
+    # The tiered `overrides` array is ignored rather than fatal.
+    assert parsed["anthropic/claude-sonnet-4.5"].pricing.input_cache_write == 0.00000375
 
 
 def test_calculate_cost_accounts_for_reasoning_cache_and_web_search_pricing():

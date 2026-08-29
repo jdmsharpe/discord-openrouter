@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,6 +14,8 @@ from discord_openrouter.cogs.openrouter.chat import (
     _run_conversation_turn,
     _validate_model_input_modalities,
     _validate_prompt_cache_request,
+    run_chat_command,
+    validate_model_output_modalities,
 )
 from discord_openrouter.util import ChatSettings, Conversation, ModelInfo
 
@@ -50,6 +52,96 @@ def test_validate_model_input_modalities_allows_pdf_without_file_support():
     )
 
     assert error is None
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "bytedance-seed/seedream-5-0-pro",
+        "google/gemini-3.1-flash-tts-preview",
+        "openai/gpt-transcribe",
+        "alibaba/happyhorse-1.1",
+        "google/gemini-embedding-2",
+        "cohere/rerank-4-pro",
+    ],
+)
+def test_validate_model_output_modalities_blocks_live_non_text_models(
+    mixed_modality_models, model_id
+):
+    error = validate_model_output_modalities(mixed_modality_models[model_id])
+
+    assert error is not None
+    assert f"`{model_id}` does not advertise text output" in error
+    outputs = {m.casefold() for m in mixed_modality_models[model_id].output_modalities}
+    hints = {
+        hint
+        for modality, hint in {
+            "image": "/openrouter-media image",
+            "video": "/openrouter-media video",
+            "speech": "/openrouter-tools tts",
+            "audio": "/openrouter-tools tts",
+        }.items()
+        if modality in outputs
+    }
+    if hints:
+        assert all(hint in error for hint in hints)
+    else:
+        assert "no command that drives that output type" in error
+
+
+def test_validate_model_output_modalities_allows_text_capable_and_unknown_models(
+    mixed_modality_models,
+):
+    for model_id in (
+        "deepseek/deepseek-v4-flash",
+        "anthropic/claude-sonnet-4.5",
+        "google/gemini-3.1-flash-image",
+        "openai/gpt-audio",
+    ):
+        assert validate_model_output_modalities(mixed_modality_models[model_id]) is None
+    assert validate_model_output_modalities(None) is None
+    # No advertised outputs means the catalog did not say; treated as text like describe_modalities.
+    assert validate_model_output_modalities(ModelInfo(id="x", name="x")) is None
+
+
+@pytest.mark.asyncio
+async def test_run_chat_command_rejects_non_text_output_model_before_request(
+    mixed_modality_models,
+):
+    """A fuzzy `model` query that lands on a TTS entry fails pre-flight, not at OpenRouter."""
+    cog = SimpleNamespace(
+        logger=MagicMock(),
+        conversation_histories={},
+        channel_model_defaults={},
+        openrouter_client=SimpleNamespace(
+            get_model=AsyncMock(
+                return_value=mixed_modality_models["google/gemini-3.1-flash-tts-preview"]
+            ),
+            create_chat_completion=AsyncMock(),
+        ),
+    )
+    user = SimpleNamespace(id=7)
+    ctx = SimpleNamespace(
+        channel=SimpleNamespace(id=100),
+        user=user,
+        author=user,
+        defer=AsyncMock(),
+        followup=SimpleNamespace(send=AsyncMock()),
+        interaction=SimpleNamespace(id=555),
+    )
+
+    with (
+        patch.object(chat, "send_embed_batches", new=AsyncMock()) as send,
+        patch.object(chat, "error_embed") as error_embed_factory,
+    ):
+        await run_chat_command(cog, ctx=ctx, prompt="hello", model="gemini tts")
+
+    message = error_embed_factory.call_args.args[0]
+    assert "`google/gemini-3.1-flash-tts-preview` does not advertise text output" in message
+    assert "/openrouter-tools tts" in message
+    send.assert_awaited_once()
+    cog.openrouter_client.create_chat_completion.assert_not_awaited()
+    assert cog.conversation_histories == {}
 
 
 def test_build_request_plugins_adds_pdf_parser_for_pdf_turns():

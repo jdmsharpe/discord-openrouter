@@ -138,6 +138,14 @@ async def run_chat_command(
         channel_id=channel.id,
         user_id=user.id,
     )
+    output_validation_error = validate_model_output_modalities(model_info)
+    if output_validation_error:
+        await send_embed_batches(
+            ctx.followup.send,
+            embed=error_embed(output_validation_error),
+            logger=cog.logger,
+        )
+        return
     try:
         resolved_pdf_engine = (
             normalize_pdf_engine(pdf_engine)
@@ -629,6 +637,42 @@ def _validate_model_input_modalities(
     return (
         f"`{model_info.id}` does not advertise the required input modalities "
         f"in the OpenRouter catalog: {formatted_modalities}."
+    )
+
+
+def validate_model_output_modalities(model_info) -> str | None:
+    """Reject catalog entries that cannot answer a chat turn with text.
+
+    The catalog lists every output modality (image-only, speech, transcription,
+    video, embeddings, rerank) now that both listing calls pass ``output_modalities=all``,
+    so a fuzzy ``model`` query can resolve to a model chat completions cannot drive.
+    Fail before the request instead of relaying OpenRouter's raw routing error. An
+    empty list means the catalog did not say, and is treated as text like
+    ``describe_modalities`` does.
+    """
+    if model_info is None or not model_info.output_modalities:
+        return None
+    if "text" in {modality.casefold() for modality in model_info.output_modalities}:
+        return None
+    outputs = {modality.casefold() for modality in model_info.output_modalities}
+    advertised = ", ".join(f"`{modality}`" for modality in model_info.output_modalities)
+    hints = [
+        command
+        for modalities, command in (
+            ({"image"}, "`/openrouter-media image`"),
+            ({"video"}, "`/openrouter-media video`"),
+            ({"speech", "audio"}, "`/openrouter-tools tts`"),
+        )
+        if outputs & modalities
+    ]
+    hint = (
+        f" Use {' or '.join(hints)} for this model instead."
+        if hints
+        else " This bot has no command that drives that output type."
+    )
+    return (
+        f"`{model_info.id}` does not advertise text output in the OpenRouter catalog "
+        f"(outputs: {advertised}), so it cannot be used for chat.{hint}"
     )
 
 

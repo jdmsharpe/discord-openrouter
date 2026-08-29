@@ -19,6 +19,7 @@ from discord_openrouter.cogs.openrouter.speech import (
     run_stt_command,
     run_tts_command,
 )
+from discord_openrouter.config import DEFAULT_STT_MODEL, DEFAULT_TTS_MODEL
 from discord_openrouter.util import ModelInfo
 
 
@@ -267,6 +268,45 @@ class TestRunTtsCommand:
 
         cog.openrouter_client.get_model.assert_awaited_once_with("openai/tts-1-hd")
 
+    def test_default_tts_model_from_live_catalog_is_accepted(self, mixed_modality_models):
+        # The real default entry advertises only `speech`, which TTS_OUTPUT_MODALITIES accepts.
+        assert DEFAULT_TTS_MODEL in mixed_modality_models
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=mixed_modality_models[DEFAULT_TTS_MODEL]
+        )
+        cog.openrouter_client.create_speech = AsyncMock(
+            return_value={"audio_bytes": b"", "usage": {}}
+        )
+
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
+            self._run(cog, ctx, input_text="hello")
+
+        cog.openrouter_client.create_speech.assert_awaited_once()
+        assert cog.openrouter_client.create_speech.await_args.kwargs["modalities"] == ["audio"]
+        assert "no audio data" in error_embed_factory.call_args.args[0]
+
+    @pytest.mark.parametrize(
+        "model_id",
+        [
+            "bytedance-seed/seedream-5-0-pro",
+            "openai/gpt-transcribe",
+            "deepseek/deepseek-v4-flash",
+        ],
+    )
+    def test_rejects_live_models_without_audio_output(self, mixed_modality_models, model_id):
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(return_value=mixed_modality_models[model_id])
+
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
+            self._run(cog, ctx, input_text="hello", model=model_id)
+
+        message = error_embed_factory.call_args.args[0]
+        assert f"`{model_id}` does not advertise audio output" in message
+        cog.openrouter_client.create_speech.assert_not_awaited()
+
 
 class TestRunSttCommand:
     def _run(self, cog, ctx, **kwargs):
@@ -347,3 +387,47 @@ class TestRunSttCommand:
             self._run(cog, ctx, attachment=_make_attachment(), model="any/stt")
 
         error_embed_factory.assert_called_once_with("upstream auth error")
+
+    def test_default_stt_model_from_live_catalog_is_accepted(self, mixed_modality_models):
+        assert DEFAULT_STT_MODEL in mixed_modality_models
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=mixed_modality_models[DEFAULT_STT_MODEL]
+        )
+        cog.openrouter_client.create_chat_completion = AsyncMock(
+            return_value={
+                "choices": [{"message": {"role": "assistant", "content": "hello world"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 3},
+            }
+        )
+        audio_part = {"type": "input_audio", "input_audio": {"data": "AAAA", "format": "mp3"}}
+
+        with (
+            patch(
+                "discord_openrouter.cogs.openrouter.speech._build_stt_attachment_part",
+                new=AsyncMock(return_value=audio_part),
+            ),
+            patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory,
+        ):
+            send = self._run(cog, ctx, attachment=_make_attachment())
+
+        cog.openrouter_client.create_chat_completion.assert_awaited_once()
+        error_embed_factory.assert_not_called()
+        send.assert_awaited_once()
+
+    def test_rejects_live_transcription_only_model(self, mixed_modality_models):
+        # Dedicated transcription models advertise `transcription` output, not `text`; the STT
+        # path drives chat completions, so they get the friendly pre-flight error.
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.get_model = AsyncMock(
+            return_value=mixed_modality_models["openai/gpt-transcribe"]
+        )
+
+        with patch("discord_openrouter.cogs.openrouter.speech.error_embed") as error_embed_factory:
+            self._run(cog, ctx, attachment=_make_attachment(), model="openai/gpt-transcribe")
+
+        message = error_embed_factory.call_args.args[0]
+        assert "`openai/gpt-transcribe` does not advertise text output" in message
+        cog.openrouter_client.create_chat_completion.assert_not_awaited()
