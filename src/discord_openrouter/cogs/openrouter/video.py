@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 from discord import ApplicationContext, Attachment, Colour, Embed, File, HTTPException
 
 from ...config import OPENROUTER_DEFAULT_VIDEO_MODEL, SHOW_COST_EMBEDS
+from ...cost_line import count_label
+from ...util import extract_usage, resolve_request_cost
 from .attachments import AttachmentInputError, build_attachment_parts
 from .client import OpenRouterApiError
 from .embed_delivery import send_embed_batches
@@ -177,7 +179,7 @@ async def run_video_command(
         _coerce_str(status_response.get("id")) or _coerce_str(submit_response.get("id")) or "video"
     )
     video_assets = await _download_video_assets(cog, unsigned_urls, job_id=job_id)
-    request_cost = _safe_float_or_none((status_response.get("usage") or {}).get("cost"))
+    request_cost = resolve_request_cost(extract_usage(status_response))
     daily_cost = track_daily_cost(cog, ctx.author.id, request_cost)
 
     cog.logger.info(
@@ -354,15 +356,15 @@ def _build_pricing_details(
     resolution: str | None,
     size: str | None,
     output_count: int,
-) -> str:
-    details = ["video generation", f"{output_count} output{'s' if output_count != 1 else ''}"]
+) -> list[str]:
+    details = [count_label(output_count, "video")]
     if resolution:
         details.append(resolution)
     if aspect_ratio:
         details.append(aspect_ratio)
     if size:
         details.append(size)
-    return " · ".join(details)
+    return details
 
 
 def _guess_video_extension(url: str, content_type: str | None) -> str:
@@ -380,15 +382,6 @@ def _guess_video_extension(url: str, content_type: str | None) -> str:
 
 def _coerce_str(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
-
-
-def _safe_float_or_none(value: Any) -> float | None:
-    try:
-        if value is None:
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 __all__ = ["run_video_command"]

@@ -2,13 +2,15 @@ import pytest
 
 pytest.importorskip("discord")
 
+from discord import Colour
+
 from discord_openrouter.cogs.openrouter.embeds import (
     append_citations_embed,
     append_flat_pricing_embed,
     append_usage_embed,
     build_model_list_embed,
 )
-from discord_openrouter.util import ChatUsage, ModelInfo, ModelPricing, extract_usage
+from discord_openrouter.util import ChatUsage, extract_usage
 
 
 def test_long_citation_links_are_kept_complete_or_omitted():
@@ -28,7 +30,7 @@ def test_long_citation_links_are_kept_complete_or_omitted():
     assert len(embeds[0].description) <= 4000
 
 
-def test_append_usage_embed_matches_compact_footer_convention():
+def test_append_usage_embed_builds_one_cost_line():
     embeds = []
 
     append_usage_embed(
@@ -45,32 +47,23 @@ def test_append_usage_embed_matches_compact_footer_convention():
     )
 
     assert len(embeds) == 1
-    description = embeds[0].description
-    assert description is not None
-    assert description.startswith("$0.05")
-    assert "1,000 tokens in (300 cached)" in description
-    assert "500 tokens out (200 reasoning)" in description
-    assert "2 searches" in description
-    assert "daily $1.50" in description
-    assert "\n" not in description
+    assert embeds[0].description == (
+        "$0.0500 · 1k in (300 cached) / 500 out (200 thinking) · 2 searches · $1.50 today"
+    )
+    assert embeds[0].colour == Colour.blue()
 
 
 def test_append_usage_embed_counts_searches_from_server_tool_use_details():
     embeds = []
-    model_info = ModelInfo(
-        id="deepseek/deepseek-v4-flash",
-        name="DeepSeek V4 Flash",
-        pricing=ModelPricing(web_search=0.01),
-    )
     usage = extract_usage(
         {
             "usage": {
                 "prompt_tokens": 5012,
                 "completion_tokens": 310,
                 "server_tool_use_details": {
-                    "web_search_requests": 2,
-                    "tool_calls_requested": 2,
-                    "tool_calls_executed": 2,
+                    "web_search_requests": 1,
+                    "tool_calls_requested": 1,
+                    "tool_calls_executed": 1,
                 },
             }
         }
@@ -81,31 +74,13 @@ def test_append_usage_embed_counts_searches_from_server_tool_use_details():
         usage=usage,
         request_cost=0.0213,
         daily_cost=None,
-        model_info=model_info,
     )
 
-    description = embeds[0].description
-    assert description is not None
-    lines = description.splitlines()
-    assert "2 searches" in lines[0]
-    assert lines[1] == "search $0.02"
+    assert embeds[0].description == "$0.0213 · 5k in / 310 out · 1 search"
 
 
-def test_append_usage_embed_adds_second_line_for_cost_breakdown_and_upstream():
+def test_append_usage_embed_leaves_out_cache_writes_and_media_token_splits():
     embeds = []
-    model_info = ModelInfo(
-        id="anthropic/claude-sonnet-4.5",
-        name="Claude Sonnet 4.5",
-        pricing=ModelPricing(
-            prompt=1.0,
-            completion=2.0,
-            request=3.0,
-            web_search=7.0,
-            internal_reasoning=4.0,
-            input_cache_read=5.0,
-            input_cache_write=6.0,
-        ),
-    )
 
     append_usage_embed(
         embeds,
@@ -115,59 +90,34 @@ def test_append_usage_embed_adds_second_line_for_cost_breakdown_and_upstream():
             reasoning_tokens=20,
             cached_tokens=30,
             cache_write_tokens=10,
+            input_audio_tokens=5,
+            input_video_tokens=4,
+            output_audio_tokens=3,
+            output_image_tokens=7,
             upstream_inference_cost=19.0,
             server_tool_use={"web_search_requests": 2},
         ),
         request_cost=427.0,
         daily_cost=500.0,
-        model_info=model_info,
     )
 
     assert len(embeds) == 1
-    description = embeds[0].description
-    assert description is not None
-    lines = description.splitlines()
-    assert len(lines) == 2
-    assert "input $60.00" in lines[1]
-    assert "cache read $150.00" in lines[1]
-    assert "cache write $60.00" in lines[1]
-    assert "output $60.00" in lines[1]
-    assert "reasoning $80.00" in lines[1]
-    assert "request $3.00" in lines[1]
-    assert "search $14.00" in lines[1]
-    assert "upstream $19.00" in lines[1]
-
-
-def test_append_usage_embed_uses_subcent_and_round_up_currency_formatting():
-    embeds = []
-    model_info = ModelInfo(
-        id="openai/gpt-5.2",
-        name="GPT-5.2",
-        pricing=ModelPricing(
-            prompt=0.0048,
-            completion=0.0004,
-        ),
+    assert embeds[0].description == (
+        "$427.0000 · 100 in (30 cached) / 50 out (20 thinking) · 2 searches · $500.00 today"
     )
+
+
+def test_append_usage_embed_shows_request_cost_to_four_decimals_and_daily_in_cents():
+    embeds = []
 
     append_usage_embed(
         embeds,
-        usage=ChatUsage(
-            prompt_tokens=1,
-            completion_tokens=1,
-        ),
+        usage=ChatUsage(prompt_tokens=1, completion_tokens=1),
         request_cost=0.0052,
         daily_cost=1.501,
-        model_info=model_info,
     )
 
-    assert len(embeds) == 1
-    description = embeds[0].description
-    assert description is not None
-    lines = description.splitlines()
-    assert lines[0].startswith("<$0.01")
-    assert "daily $1.51" in lines[0]
-    assert "input <$0.01" in lines[1]
-    assert "output <$0.01" in lines[1]
+    assert embeds[0].description == "$0.0052 · 1 in / 1 out · $1.50 today"
 
 
 def test_append_usage_embed_prefixes_estimated_request_cost():
@@ -175,35 +125,41 @@ def test_append_usage_embed_prefixes_estimated_request_cost():
 
     append_usage_embed(
         embeds,
-        usage=ChatUsage(
-            prompt_tokens=1,
-            completion_tokens=1,
-        ),
+        usage=ChatUsage(prompt_tokens=1, completion_tokens=1),
         request_cost=0.0052,
         daily_cost=0.0052,
         request_cost_is_estimate=True,
     )
 
-    assert len(embeds) == 1
-    description = embeds[0].description
-    assert description is not None
-    assert description.startswith("est. <$0.01")
-    assert "daily <$0.01" in description
+    assert embeds[0].description == "est. $0.0052 · 1 in / 1 out · <$0.01 today"
 
 
-def test_append_flat_pricing_embed_uses_compact_currency_formatting():
+def test_append_usage_embed_leaves_out_unknown_costs():
+    embeds = []
+
+    append_usage_embed(
+        embeds,
+        usage=ChatUsage(prompt_tokens=12_500, completion_tokens=405, cached_tokens=12_500),
+        request_cost=None,
+        daily_cost=None,
+    )
+
+    assert embeds[0].description == "12.5k in (12.5k cached) / 405 out"
+
+
+def test_append_flat_pricing_embed_builds_one_cost_line():
     embeds = []
 
     append_flat_pricing_embed(
         embeds,
         request_cost=0.0052,
         daily_cost=1.501,
-        details="video generation",
+        details=["1 video", "720p"],
     )
 
     assert len(embeds) == 1
-    description = embeds[0].description
-    assert description == "<$0.01 · video generation · daily $1.51"
+    assert embeds[0].description == "$0.0052 · 1 video · 720p · $1.50 today"
+    assert embeds[0].colour == Colour.blue()
 
 
 def test_append_flat_pricing_embed_prefixes_estimated_request_cost():
@@ -211,15 +167,51 @@ def test_append_flat_pricing_embed_prefixes_estimated_request_cost():
 
     append_flat_pricing_embed(
         embeds,
-        request_cost=0.0052,
-        daily_cost=1.501,
-        details="video generation",
+        request_cost=0.00002,
+        daily_cost=0.004,
+        details=["1,234 chars", "alloy"],
         request_cost_is_estimate=True,
     )
 
-    assert len(embeds) == 1
-    description = embeds[0].description
-    assert description == "est. <$0.01 · video generation · daily $1.51"
+    assert embeds[0].description == "est. <$0.0001 · 1,234 chars · alloy · <$0.01 today"
+
+
+def test_append_flat_pricing_embed_shows_reported_token_counts():
+    embeds = []
+
+    append_flat_pricing_embed(
+        embeds,
+        request_cost=0.039,
+        daily_cost=0.12,
+        details=["1 image", "16:9"],
+        usage=ChatUsage(prompt_tokens=12, completion_tokens=1_290, reasoning_tokens=200),
+    )
+
+    assert embeds[0].description == (
+        "$0.0390 · 12 in / 1.3k out (200 thinking) · 1 image · 16:9 · $0.12 today"
+    )
+
+
+def test_append_flat_pricing_embed_leaves_out_unreported_token_counts():
+    embeds = []
+
+    append_flat_pricing_embed(
+        embeds,
+        request_cost=0.0008,
+        daily_cost=0.02,
+        details=["memo.m4a"],
+        usage=ChatUsage(prompt_tokens=250),
+    )
+
+    assert embeds[0].description == "$0.0008 · 250 in · memo.m4a · $0.02 today"
+
+
+def test_append_flat_pricing_embed_skips_empty_line():
+    embeds = []
+
+    append_flat_pricing_embed(embeds, request_cost=None, daily_cost=None)
+
+    assert embeds == []
 
 
 def test_build_current_model_embed_shows_all_modalities_with_no_channel_defaults():

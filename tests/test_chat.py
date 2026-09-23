@@ -362,3 +362,82 @@ async def test_run_conversation_turn_splits_long_embed_response_without_plain_te
     )
     assert "view" not in send_reply.await_args_list[0].kwargs
     assert "view" in send_reply.await_args_list[-1].kwargs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("is_byok", "expected_cost", "expected_line"),
+    [
+        (
+            True,
+            0.0105,
+            "$0.0105 · 2.3k in (512 cached) / 441 out (66 thinking) · 1 search · $0.01 today",
+        ),
+        (
+            False,
+            0.0005,
+            "$0.0005 · 2.3k in (512 cached) / 441 out (66 thinking) · 1 search · <$0.01 today",
+        ),
+    ],
+    ids=["byok", "not-byok"],
+)
+async def test_run_conversation_turn_cost_line_and_daily_total_follow_byok_rule(
+    monkeypatch, is_byok, expected_cost, expected_line
+):
+    async def keep_typing_until_cancelled(_channel):
+        import asyncio
+
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(chat, "keep_typing", keep_typing_until_cancelled)
+    monkeypatch.setattr(chat, "SHOW_COST_EMBEDS", True)
+
+    response_payload = {
+        "id": "response-1",
+        "choices": [{"message": {"role": "assistant", "content": "hello"}}],
+        "usage": {
+            "prompt_tokens": 2300,
+            "completion_tokens": 441,
+            "prompt_tokens_details": {"cached_tokens": 512, "cache_write_tokens": 128},
+            "completion_tokens_details": {"reasoning_tokens": 66},
+            "cost": 0.0005,
+            "is_byok": is_byok,
+            "cost_details": {"upstream_inference_cost": 0.01},
+            "server_tool_use_details": {"web_search_requests": 1},
+        },
+    }
+    model_info = ModelInfo(id="openai/test", name="Test", input_modalities=["text"])
+    cog = SimpleNamespace(
+        logger=MagicMock(),
+        openrouter_client=SimpleNamespace(
+            create_chat_completion=AsyncMock(return_value=response_payload),
+            get_model=AsyncMock(return_value=model_info),
+        ),
+        _strip_previous_view=AsyncMock(),
+        _create_button_view=MagicMock(return_value=object()),
+        daily_costs={},
+        views={},
+        last_view_messages={},
+    )
+    conversation = Conversation(
+        conversation_id=123,
+        conversation_starter_id=456,
+        channel_id=789,
+        settings=ChatSettings(model="openai/test"),
+    )
+    conversation.append_user_message({"role": "user", "content": "hello"})
+    send_reply = AsyncMock(return_value="reply")
+
+    success = await _run_conversation_turn(
+        cog,
+        conversation=conversation,
+        send_reply=send_reply,
+        user_id=456,
+        channel=SimpleNamespace(),
+    )
+
+    assert success is True
+    cost_embed = send_reply.await_args.kwargs["embeds"][-1]
+    assert cost_embed.description == expected_line
+    [(daily_total, _)] = cog.daily_costs.values()
+    assert daily_total == pytest.approx(expected_cost)

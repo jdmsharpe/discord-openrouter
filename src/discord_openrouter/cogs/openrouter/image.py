@@ -8,10 +8,12 @@ import httpx
 from discord import ApplicationContext, Attachment, Colour, Embed, File
 
 from ...config import OPENROUTER_DEFAULT_IMAGE_MODEL, SHOW_COST_EMBEDS
+from ...cost_line import count_label
 from ...util import (
     calculate_cost,
     extract_message_text,
     extract_usage,
+    resolve_request_cost,
     sanitize_assistant_message,
     truncate_text,
 )
@@ -160,7 +162,8 @@ async def run_image_command(
         return
 
     usage = extract_usage(response_payload)
-    request_cost = usage.cost if usage.cost is not None else calculate_cost(model_info, usage)
+    reported_cost = resolve_request_cost(usage)
+    request_cost = reported_cost if reported_cost is not None else calculate_cost(model_info, usage)
     daily_cost = track_daily_cost(cog, ctx.author.id, request_cost)
     response_text = extract_message_text(assistant_message)
 
@@ -197,9 +200,13 @@ async def run_image_command(
             request_cost=request_cost,
             daily_cost=daily_cost,
             details=_build_pricing_details(
-                mode=mode, aspect_ratio=aspect_ratio, image_size=image_size
+                image_count=len(files),
+                edited=attachment is not None,
+                aspect_ratio=aspect_ratio,
+                image_size=image_size,
             ),
-            request_cost_is_estimate=usage.cost is None and request_cost is not None,
+            request_cost_is_estimate=reported_cost is None and request_cost is not None,
+            usage=usage,
         )
 
     await send_embed_batches(
@@ -284,13 +291,19 @@ def _build_image_description(
     return "\n".join(lines)
 
 
-def _build_pricing_details(*, mode: str, aspect_ratio: str | None, image_size: str | None) -> str:
-    details = [mode.lower()]
+def _build_pricing_details(
+    *,
+    image_count: int,
+    edited: bool,
+    aspect_ratio: str | None,
+    image_size: str | None,
+) -> list[str]:
+    details = [count_label(image_count, "edited image" if edited else "image")]
     if aspect_ratio:
         details.append(aspect_ratio)
     if image_size:
         details.append(image_size)
-    return " · ".join(details)
+    return details
 
 
 async def build_image_assets(

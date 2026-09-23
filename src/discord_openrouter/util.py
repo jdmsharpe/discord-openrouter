@@ -51,6 +51,7 @@ class ChatUsage:
     output_audio_tokens: int = 0
     output_image_tokens: int = 0
     cost: float | None = None
+    is_byok: bool = False
     upstream_inference_cost: float | None = None
     server_tool_use: dict[str, int] = field(default_factory=dict)
 
@@ -191,6 +192,7 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
         output_audio_tokens=output_audio_tokens,
         output_image_tokens=output_image_tokens,
         cost=_safe_float_or_none(usage.get("cost")),
+        is_byok=usage.get("is_byok") is True,
         upstream_inference_cost=_safe_float_or_none(cost_details.get("upstream_inference_cost")),
         # OpenRouter reports server-tool counts under `server_tool_use_details`;
         # a `server_tool_use` mapping is read instead when that key is absent.
@@ -198,6 +200,20 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
             usage.get("server_tool_use_details") or usage.get("server_tool_use")
         ),
     )
+
+
+def resolve_request_cost(usage: ChatUsage) -> float | None:
+    """Return the request's cost as reported by OpenRouter, or ``None`` when it reports none.
+
+    ``usage.cost`` is the amount charged to the OpenRouter account. For a BYOK request
+    that amount is only OpenRouter's fee, and the provider bills the user's own key the
+    ``upstream_inference_cost`` separately, so the two are added.
+    """
+    if usage.cost is None:
+        return None
+    if usage.is_byok and usage.upstream_inference_cost is not None:
+        return usage.cost + usage.upstream_inference_cost
+    return usage.cost
 
 
 def calculate_cost_breakdown(

@@ -23,6 +23,7 @@ from discord_openrouter.util import (
     normalize_pdf_engine,
     parse_model_info,
     prompt_cache_supported_for_model,
+    resolve_request_cost,
 )
 
 
@@ -130,6 +131,7 @@ def test_extract_usage_reads_openrouter_cost_cache_and_server_tools():
     assert usage.output_audio_tokens == 12
     assert usage.output_image_tokens == 4
     assert usage.cost == 0.0032
+    assert usage.is_byok is False
     assert usage.upstream_inference_cost == 19.0
     assert usage.server_tool_use == {"web_search": 2}
 
@@ -311,6 +313,46 @@ def test_calculate_cost_breakdown_returns_component_totals():
         request=3.0,
         web_search=14.0,
     )
+
+
+@pytest.mark.parametrize(
+    ("byok_field", "expected_is_byok", "expected_cost"),
+    [
+        ({"is_byok": True}, True, 0.0105),
+        ({"is_byok": False}, False, 0.0005),
+        ({}, False, 0.0005),
+    ],
+    ids=["byok", "not-byok", "byok-missing"],
+)
+def test_resolve_request_cost_adds_upstream_cost_only_for_byok(
+    byok_field, expected_is_byok, expected_cost
+):
+    usage = extract_usage(
+        {
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "cost": 0.0005,
+                "cost_details": {"upstream_inference_cost": 0.01},
+                **byok_field,
+            }
+        }
+    )
+
+    assert usage.is_byok is expected_is_byok
+    assert resolve_request_cost(usage) == pytest.approx(expected_cost)
+
+
+def test_resolve_request_cost_uses_cost_when_byok_has_no_upstream_cost():
+    usage = ChatUsage(cost=0.0005, is_byok=True)
+
+    assert resolve_request_cost(usage) == 0.0005
+
+
+def test_resolve_request_cost_returns_none_without_reported_cost():
+    usage = ChatUsage(is_byok=True, upstream_inference_cost=0.01)
+
+    assert resolve_request_cost(usage) is None
 
 
 def test_normalize_pdf_engine_aliases_deprecated_values():

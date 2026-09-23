@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from decimal import ROUND_CEILING, Decimal
+from collections.abc import Iterable
 
 from discord import Colour, Embed
 
+from ...cost_line import count_label, format_cost_line
 from ...util import (
     ChatUsage,
     ModelInfo,
-    calculate_cost_breakdown,
     chunk_text,
     describe_modalities,
     extract_web_search_requests,
@@ -86,53 +86,23 @@ def append_usage_embed(
     usage: ChatUsage,
     request_cost: float | None,
     daily_cost: float | None,
-    model_info: ModelInfo | None = None,
     request_cost_is_estimate: bool = False,
 ) -> None:
-    parts: list[str] = []
-    if request_cost is not None:
-        parts.append(
-            _format_display_currency_amount(request_cost, estimated=request_cost_is_estimate)
-        )
-
-    in_part = f"{usage.prompt_tokens:,} tokens in"
-    in_details: list[str] = []
-    if usage.cached_tokens:
-        in_details.append(f"{usage.cached_tokens:,} cached")
-    if usage.cache_write_tokens:
-        in_details.append(f"{usage.cache_write_tokens:,} cache write")
-    if usage.input_audio_tokens:
-        in_details.append(f"{usage.input_audio_tokens:,} audio")
-    if usage.input_video_tokens:
-        in_details.append(f"{usage.input_video_tokens:,} video")
-    if in_details:
-        in_part += f" ({', '.join(in_details)})"
-
-    out_part = f"{usage.completion_tokens:,} tokens out"
-    out_details: list[str] = []
-    if usage.reasoning_tokens:
-        out_details.append(f"{usage.reasoning_tokens:,} reasoning")
-    if usage.output_audio_tokens:
-        out_details.append(f"{usage.output_audio_tokens:,} audio")
-    if usage.output_image_tokens:
-        out_details.append(f"{usage.output_image_tokens:,} image")
-    if out_details:
-        out_part += f" ({', '.join(out_details)})"
-    parts.append(f"{in_part} / {out_part}")
-
+    details: list[str] = []
     web_search_requests = extract_web_search_requests(usage.server_tool_use)
     if web_search_requests:
-        suffix = "es" if web_search_requests != 1 else ""
-        parts.append(f"{web_search_requests} search{suffix}")
-    if daily_cost is not None:
-        parts.append(f"daily {_format_currency_amount(daily_cost)}")
-
-    description = " · ".join(parts)
-    cost_detail_line = _build_cost_detail_line(usage=usage, model_info=model_info)
-    if cost_detail_line:
-        description += "\n" + cost_detail_line
-
-    embeds.append(Embed(description=description, color=Colour.blue()))
+        details.append(count_label(web_search_requests, "search", "searches"))
+    line = format_cost_line(
+        request_cost,
+        daily_cost,
+        input_tokens=usage.prompt_tokens,
+        output_tokens=usage.completion_tokens,
+        cached_tokens=usage.cached_tokens,
+        thinking_tokens=usage.reasoning_tokens,
+        details=details,
+        estimated=request_cost_is_estimate,
+    )
+    embeds.append(Embed(description=line, color=Colour.blue()))
 
 
 def append_flat_pricing_embed(
@@ -140,60 +110,27 @@ def append_flat_pricing_embed(
     *,
     request_cost: float | None,
     daily_cost: float | None,
-    details: str | None = None,
+    details: Iterable[str] = (),
     request_cost_is_estimate: bool = False,
+    usage: ChatUsage | None = None,
 ) -> None:
-    parts: list[str] = []
-    if request_cost is not None:
-        parts.append(
-            _format_display_currency_amount(request_cost, estimated=request_cost_is_estimate)
-        )
-    if details:
-        parts.append(details)
-    if daily_cost is not None:
-        parts.append(f"daily {_format_currency_amount(daily_cost)}")
-    if not parts:
+    """Append the one-line cost embed for an image, speech or video command.
+
+    Token counts show only when ``usage`` reports them; a zero count is left out.
+    """
+    line = format_cost_line(
+        request_cost,
+        daily_cost,
+        input_tokens=(usage.prompt_tokens or None) if usage else None,
+        output_tokens=(usage.completion_tokens or None) if usage else None,
+        cached_tokens=usage.cached_tokens if usage else 0,
+        thinking_tokens=usage.reasoning_tokens if usage else 0,
+        details=details,
+        estimated=request_cost_is_estimate,
+    )
+    if not line:
         return
-    embeds.append(Embed(description=" · ".join(parts), color=Colour.blue()))
-
-
-def _build_cost_detail_line(*, usage: ChatUsage, model_info: ModelInfo | None) -> str | None:
-    breakdown = calculate_cost_breakdown(model_info, usage)
-    parts: list[str] = []
-    if breakdown is not None:
-        _append_cost_part(parts, "input", breakdown.input)
-        _append_cost_part(parts, "cache read", breakdown.cache_read)
-        _append_cost_part(parts, "cache write", breakdown.cache_write)
-        _append_cost_part(parts, "output", breakdown.output)
-        _append_cost_part(parts, "reasoning", breakdown.reasoning)
-        _append_cost_part(parts, "request", breakdown.request)
-        _append_cost_part(parts, "search", breakdown.web_search)
-    if usage.upstream_inference_cost is not None:
-        _append_cost_part(parts, "upstream", usage.upstream_inference_cost)
-    return " · ".join(parts) or None
-
-
-def _append_cost_part(parts: list[str], label: str, amount: float) -> None:
-    if amount <= 0:
-        return
-    parts.append(f"{label} {_format_currency_amount(amount)}")
-
-
-def _format_display_currency_amount(amount: float, *, estimated: bool = False) -> str:
-    value = _format_currency_amount(amount)
-    if estimated and amount > 0:
-        return f"est. {value}"
-    return value
-
-
-def _format_currency_amount(amount: float) -> str:
-    decimal_amount = Decimal(str(amount))
-    if decimal_amount <= 0:
-        return "$0.00"
-    if decimal_amount < Decimal("0.01"):
-        return "<$0.01"
-    rounded = decimal_amount.quantize(Decimal("0.01"), rounding=ROUND_CEILING)
-    return f"${rounded}"
+    embeds.append(Embed(description=line, color=Colour.blue()))
 
 
 def build_model_status_embed(

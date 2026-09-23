@@ -31,6 +31,7 @@ from ...util import (
     extract_usage,
     normalize_pdf_engine,
     prompt_cache_supported_for_model,
+    resolve_request_cost,
     sanitize_assistant_message,
     truncate_text,
 )
@@ -435,7 +436,8 @@ async def _run_conversation_turn(
             conversation.settings.model
         )
         estimated_cost = calculate_cost(model_info, usage)
-        request_cost = usage.cost if usage.cost is not None else estimated_cost
+        reported_cost = resolve_request_cost(usage)
+        request_cost = reported_cost if reported_cost is not None else estimated_cost
         daily_cost = track_daily_cost(cog, user_id, request_cost)
         response_id = (
             response_payload.get("id") if isinstance(response_payload.get("id"), str) else "unknown"
@@ -480,8 +482,7 @@ async def _run_conversation_turn(
                 usage=usage,
                 request_cost=request_cost,
                 daily_cost=daily_cost,
-                model_info=model_info,
-                request_cost_is_estimate=usage.cost is None and request_cost is not None,
+                request_cost_is_estimate=reported_cost is None and request_cost is not None,
             )
 
         conversation.append_assistant_message(assistant_message)

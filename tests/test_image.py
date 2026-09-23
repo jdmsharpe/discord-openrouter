@@ -171,16 +171,15 @@ class TestBuildImageDescription:
 class TestBuildPricingDetails:
     def test_collects_provided_fields(self):
         details = _build_pricing_details(
-            mode="Image Generation", aspect_ratio="16:9", image_size="1024x1024"
+            image_count=1, edited=False, aspect_ratio="16:9", image_size="1024x1024"
         )
-        assert "image generation" in details
-        assert "16:9" in details
-        assert "1024x1024" in details
+        assert details == ["1 image", "16:9", "1024x1024"]
 
     def test_excludes_unset_fields(self):
-        assert _build_pricing_details(mode="Image Editing", aspect_ratio=None, image_size=None) == (
-            "image editing"
+        details = _build_pricing_details(
+            image_count=2, edited=True, aspect_ratio=None, image_size=None
         )
+        assert details == ["2 edited images"]
 
 
 class TestGuessExtensionFromUrl:

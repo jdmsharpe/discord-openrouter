@@ -16,7 +16,6 @@ from discord_openrouter.cogs.openrouter.video import (
     _guess_video_extension,
     _is_image_attachment,
     _poll_until_complete,
-    _safe_float_or_none,
     _validate_video_model_modalities,
     run_video_command,
 )
@@ -182,11 +181,17 @@ class TestBuildPricingDetails:
         out = _build_pricing_details(
             aspect_ratio="16:9", resolution="1080p", size=None, output_count=1
         )
-        assert "1 output" in out and "1 outputs" not in out
+        assert out == ["1 video", "1080p", "16:9"]
 
     def test_plural_output(self):
         out = _build_pricing_details(aspect_ratio=None, resolution=None, size=None, output_count=3)
-        assert "3 outputs" in out
+        assert out == ["3 videos"]
+
+    def test_includes_size(self):
+        out = _build_pricing_details(
+            aspect_ratio=None, resolution=None, size="1280x720", output_count=1
+        )
+        assert out == ["1 video", "1280x720"]
 
 
 class TestGuessVideoExtension:
@@ -211,17 +216,6 @@ class TestCoerceStr:
     def test_returns_empty_string_for_non_strings(self):
         assert _coerce_str(None) == ""
         assert _coerce_str(42) == ""
-
-
-class TestSafeFloatOrNone:
-    def test_returns_none_for_none(self):
-        assert _safe_float_or_none(None) is None
-
-    def test_parses_numeric_string(self):
-        assert _safe_float_or_none("3.14") == pytest.approx(3.14)
-
-    def test_returns_none_for_invalid(self):
-        assert _safe_float_or_none("not a number") is None
 
 
 class TestPollUntilComplete:
@@ -353,3 +347,44 @@ class TestRunVideoCommand:
             self._run(cog, ctx, model=DEFAULT_VIDEO_MODEL)
         cog.openrouter_client.create_video_generation.assert_awaited_once()
         error_embed_factory.assert_called_once_with("quota exceeded")
+
+    @pytest.mark.parametrize(
+        ("is_byok", "expected_line", "expected_daily_total"),
+        [
+            (True, "$0.5250 · 1 video · 720p · 16:9 · $0.53 today", 0.525),
+            (False, "$0.0250 · 1 video · 720p · 16:9 · $0.03 today", 0.025),
+        ],
+        ids=["byok", "not-byok"],
+    )
+    def test_cost_line_and_daily_total_follow_byok_rule(
+        self, monkeypatch, is_byok, expected_line, expected_daily_total
+    ):
+        monkeypatch.setattr("discord_openrouter.cogs.openrouter.video.SHOW_COST_EMBEDS", True)
+        monkeypatch.setattr(
+            "discord_openrouter.cogs.openrouter.video.VIDEO_POLL_INTERVAL_SECONDS", 0
+        )
+        cog = _make_cog()
+        ctx = _make_ctx()
+        cog.openrouter_client.create_video_generation = AsyncMock(
+            return_value={"id": "job-1", "status": "pending"}
+        )
+        cog.openrouter_client.get_video_generation = AsyncMock(
+            return_value={
+                "id": "job-1",
+                "status": "completed",
+                "unsigned_urls": ["https://example.test/video.mp4"],
+                "usage": {
+                    "cost": 0.025,
+                    "is_byok": is_byok,
+                    "cost_details": {"upstream_inference_cost": 0.5},
+                },
+            }
+        )
+        cog.openrouter_client.download_file_bytes = AsyncMock(return_value=(b"video", "video/mp4"))
+
+        send = self._run(cog, ctx, model="m", resolution="720p", aspect_ratio="16:9")
+
+        cost_embed = send.await_args.kwargs["embeds"][-1]
+        assert cost_embed.description == expected_line
+        [(daily_total, _)] = cog.daily_costs.values()
+        assert daily_total == pytest.approx(expected_daily_total)
