@@ -14,7 +14,7 @@
 
 ## Overview
 
-A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. It supports image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread.
+A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. It supports image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread. Every request goes to OpenRouter's REST API directly over `httpx`; the bot does not depend on the OpenRouter Python SDK.
 
 ## Features
 
@@ -22,7 +22,7 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a 
 - **Multiple OpenRouter Models:** Seamlessly discover, query, and switch models on the fly using OpenRouter's expansive catalog. The catalog is fetched with `output_modalities=all`, so image, speech, transcription, video, embeddings, and rerank models are listed alongside the text models. Save per-channel defaults or rely on global fallbacks.
 - **Multimodal Input:** Supports text, images, PDFs, audio, video, and general file inputs using OpenRouter's normalized multimodal API. Features dedicated PDF parsing controls (`cloudflare-ai`, `mistral-ocr`, `native`).
 - **Advanced Tool Calling:** Built-in support for OpenRouter's server tools (`openrouter:web_search`, `openrouter:datetime`). Turn tools on or off mid-conversation via an interactive dropdown.
-- **Reasoning Configuration:** Customizable reasoning effort levels and token budgets for supported models. Automatically preserves `reasoning_details` in assistant messages so models can continue their chain-of-thought across turns.
+- **Reasoning Configuration:** Customizable reasoning effort levels for supported models. Automatically preserves `reasoning_details` in assistant messages so models can continue their chain-of-thought across turns.
 - **Rich Embeds & Usage Tracking:** Responses include cache reads/writes, prompt/completion tokens, and exact reported costs (or an `est.`-prefixed local fallback). Web search citations are surfaced cleanly via a Sources embed.
 - **Media Generation:**
   - **Images:** High-quality image generation and remixing/editing using models that advertise image output.
@@ -187,7 +187,7 @@ Try these multimodal and tool-assisted commands:
 
 - **Attachment Limits:** The bot currently rejects Discord attachments larger than `20 MiB`.
 - **Modality Support:** Although the bot handles normalized payloads, your selected model must actually support the requested input/output types. Use `/openrouter models` to check. Every command validates the resolved model against the catalog up front: `/openrouter chat` requires text output, `/openrouter-media image` image output, `/openrouter-media video` video output, `/openrouter-tools tts` `audio` or `speech` output, and `/openrouter-tools stt` audio input plus text output (dedicated `transcription` models are rejected, since STT runs through chat completions).
-- **Costs & Usage:** If OpenRouter returns `usage.cost`, the exact amount is displayed. If missing, the bot estimates it based on local pricing data and marks it with an `est.` prefix. Cache reads (`cached_tokens`) and writes (`cache_write_tokens`) are also displayed when reported.
+- **Costs & Usage:** If OpenRouter returns `usage.cost`, the exact amount is displayed. If missing, the bot estimates it based on local pricing data and marks it with an `est.` prefix. Cache reads (`cached_tokens`) and writes (`cache_write_tokens`) are also displayed when reported, and web search turns show how many searches OpenRouter ran (`usage.server_tool_use_details.web_search_requests`).
 - **PDF History:** Assistant annotations are preserved in conversation history, meaning you can ask follow-up questions about the same PDF across multiple turns without re-uploading the document.
 
 ## Development

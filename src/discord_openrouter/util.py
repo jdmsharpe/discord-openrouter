@@ -192,7 +192,11 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
         output_image_tokens=output_image_tokens,
         cost=_safe_float_or_none(usage.get("cost")),
         upstream_inference_cost=_safe_float_or_none(cost_details.get("upstream_inference_cost")),
-        server_tool_use=_coerce_int_mapping(usage.get("server_tool_use")),
+        # OpenRouter reports server-tool counts under `server_tool_use_details`;
+        # a `server_tool_use` mapping is read instead when that key is absent.
+        server_tool_use=_coerce_int_mapping(
+            usage.get("server_tool_use_details") or usage.get("server_tool_use")
+        ),
     )
 
 

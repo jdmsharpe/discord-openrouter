@@ -134,6 +134,42 @@ def test_extract_usage_reads_openrouter_cost_cache_and_server_tools():
     assert usage.server_tool_use == {"web_search": 2}
 
 
+def test_extract_usage_reads_server_tool_use_details():
+    usage = extract_usage(
+        {
+            "usage": {
+                "prompt_tokens": 5012,
+                "completion_tokens": 310,
+                "server_tool_use_details": {
+                    "web_search_requests": 2,
+                    "tool_calls_requested": 2,
+                    "tool_calls_executed": 2,
+                },
+            }
+        }
+    )
+
+    assert usage.server_tool_use == {
+        "web_search_requests": 2,
+        "tool_calls_requested": 2,
+        "tool_calls_executed": 2,
+    }
+    assert extract_web_search_requests(usage.server_tool_use) == 2
+
+
+def test_extract_usage_prefers_server_tool_use_details_over_server_tool_use():
+    usage = extract_usage(
+        {
+            "usage": {
+                "server_tool_use_details": {"web_search_requests": 3},
+                "server_tool_use": {"web_search": 1},
+            }
+        }
+    )
+
+    assert usage.server_tool_use == {"web_search_requests": 3}
+
+
 def test_extract_web_search_requests_supports_both_known_keys():
     assert extract_web_search_requests({"web_search": 2}) == 2
     assert extract_web_search_requests({"web_search_requests": 3}) == 3

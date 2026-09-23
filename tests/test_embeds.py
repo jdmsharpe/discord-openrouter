@@ -8,7 +8,7 @@ from discord_openrouter.cogs.openrouter.embeds import (
     append_usage_embed,
     build_model_list_embed,
 )
-from discord_openrouter.util import ChatUsage, ModelInfo, ModelPricing
+from discord_openrouter.util import ChatUsage, ModelInfo, ModelPricing, extract_usage
 
 
 def test_long_citation_links_are_kept_complete_or_omitted():
@@ -53,6 +53,42 @@ def test_append_usage_embed_matches_compact_footer_convention():
     assert "2 searches" in description
     assert "daily $1.50" in description
     assert "\n" not in description
+
+
+def test_append_usage_embed_counts_searches_from_server_tool_use_details():
+    embeds = []
+    model_info = ModelInfo(
+        id="deepseek/deepseek-v4-flash",
+        name="DeepSeek V4 Flash",
+        pricing=ModelPricing(web_search=0.01),
+    )
+    usage = extract_usage(
+        {
+            "usage": {
+                "prompt_tokens": 5012,
+                "completion_tokens": 310,
+                "server_tool_use_details": {
+                    "web_search_requests": 2,
+                    "tool_calls_requested": 2,
+                    "tool_calls_executed": 2,
+                },
+            }
+        }
+    )
+
+    append_usage_embed(
+        embeds,
+        usage=usage,
+        request_cost=0.0213,
+        daily_cost=None,
+        model_info=model_info,
+    )
+
+    description = embeds[0].description
+    assert description is not None
+    lines = description.splitlines()
+    assert "2 searches" in lines[0]
+    assert lines[1] == "search $0.02"
 
 
 def test_append_usage_embed_adds_second_line_for_cost_breakdown_and_upstream():

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
-import importlib
 import json
 import logging
 import random
@@ -174,56 +173,53 @@ class OpenRouterClient:
         user: str | None = None,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        openrouter_sdk = self._import_openrouter_sdk()
-        client_kwargs: dict[str, Any] = {"api_key": self.api_key}
-        if self.site_url:
-            client_kwargs["http_referer"] = self.site_url
-        if self.app_name:
-            client_kwargs["x_open_router_title"] = self.app_name
-        if self.app_categories:
-            client_kwargs["x_open_router_categories"] = self.app_categories
-
-        request_kwargs: dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
         }
         if modalities:
-            request_kwargs["modalities"] = list(modalities)
+            payload["modalities"] = list(modalities)
         if image_config:
-            request_kwargs["image_config"] = dict(image_config)
+            payload["image_config"] = dict(image_config)
         if plugins:
-            request_kwargs["plugins"] = [dict(plugin) for plugin in plugins]
+            payload["plugins"] = [dict(plugin) for plugin in plugins]
         if tools:
-            request_kwargs["tools"] = [dict(tool) for tool in tools]
+            payload["tools"] = [dict(tool) for tool in tools]
         if cache_control:
-            request_kwargs["cache_control"] = dict(cache_control)
+            payload["cache_control"] = dict(cache_control)
         if temperature is not None:
-            request_kwargs["temperature"] = temperature
+            payload["temperature"] = temperature
         if top_p is not None:
-            request_kwargs["top_p"] = top_p
+            payload["top_p"] = top_p
         if max_tokens is not None:
-            # OpenRouter deprecated `max_tokens` in favor of `max_completion_tokens`
-            # (the SDK accepts both but documents `max_tokens` as deprecated). Send
-            # the modern key so we are not relying on the deprecated alias.
-            request_kwargs["max_completion_tokens"] = max_tokens
+            # OpenRouter deprecated `max_tokens` in favor of `max_completion_tokens`.
+            # Send the modern key so we are not relying on the deprecated alias.
+            payload["max_completion_tokens"] = max_tokens
         reasoning_config = _build_reasoning_config(reasoning_effort=reasoning_effort)
         if reasoning_config is not None:
-            request_kwargs["reasoning"] = reasoning_config
+            payload["reasoning"] = reasoning_config
         if user:
-            request_kwargs["user"] = user
+            payload["user"] = user
         if session_id:
-            request_kwargs["session_id"] = session_id[:128]
+            payload["session_id"] = session_id[:128]
 
-        try:
-            async with openrouter_sdk.OpenRouter(**client_kwargs) as client:
-                response = await client.chat.send_async(**request_kwargs)
-        except ModuleNotFoundError as error:
-            raise OpenRouterApiError(
-                "The `openrouter` Python package is not installed. Run `python -m pip install .`."
-            ) from error
-        except Exception as error:
-            raise OpenRouterApiError(str(error)) from error
-        return _to_plain_dict(response)
+        timeout = httpx.Timeout(connect=30.0, read=300.0, write=30.0, pool=30.0)
+        response = await _request_with_retries(
+            "POST",
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            timeout=timeout,
+            headers=self._request_headers(),
+            json_payload=payload,
+        )
+
+        if response.status_code >= 400:
+            raise OpenRouterApiError(_extract_error_message(response))
+        result = response.json()
+        # OpenRouter returns HTTP 200 with an `error` object instead of `choices` when
+        # the model fails after the request was accepted.
+        if isinstance(result, dict) and result.get("error") and not result.get("choices"):
+            raise OpenRouterApiError(_extract_error_message(response))
+        return result
 
     async def create_speech(
         self,
@@ -476,10 +472,6 @@ class OpenRouterClient:
             headers["X-OpenRouter-Categories"] = self.app_categories
         return headers
 
-    @staticmethod
-    def _import_openrouter_sdk():
-        return importlib.import_module("openrouter")
-
 
 def _extract_error_message(response: Any) -> str:
     try:
@@ -577,12 +569,8 @@ def _build_tts_prompt(*, input_text: str, instructions: str | None) -> str:
 def _build_reasoning_config(*, reasoning_effort: str | None) -> dict[str, Any] | None:
     """Build the `reasoning` request object.
 
-    Only `effort` is modelled here because that is all the typed SDK sends:
-    `components.ChatRequestReasoning` declares exactly `effort` and `summary`,
-    and its generated serializer emits only declared fields. A `max_tokens` or
-    `exclude` key added here would be silently discarded before the wire, which
-    is why the corresponding slash options were removed rather than left
-    reporting settings the API never receives.
+    The bot exposes only a reasoning-effort option, so the object carries `effort`
+    and nothing else; the raw request sends it as built here.
     """
     if not reasoning_effort:
         return None
@@ -591,16 +579,6 @@ def _build_reasoning_config(*, reasoning_effort: str | None) -> dict[str, Any] |
 
 def _casefolded(values: list[str]) -> set[str]:
     return {value.casefold() for value in values}
-
-
-def _to_plain_dict(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if hasattr(value, "model_dump"):
-        return value.model_dump(by_alias=True, exclude_none=True)
-    if hasattr(value, "dict"):
-        return value.dict(exclude_none=True)
-    raise OpenRouterApiError("Unexpected response type returned by the OpenRouter SDK.")
 
 
 def build_openrouter_client() -> OpenRouterClient:
