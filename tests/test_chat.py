@@ -58,7 +58,7 @@ def test_validate_model_input_modalities_allows_pdf_without_file_support():
     "model_id",
     [
         "bytedance-seed/seedream-5-0-pro",
-        "google/gemini-3.1-flash-tts-preview",
+        "google/gemini-3.8-flash-tts",
         "openai/gpt-transcribe",
         "alibaba/happyhorse-1.1",
         "google/gemini-embedding-2",
@@ -121,9 +121,7 @@ async def test_run_chat_command_rejects_non_text_output_model_before_request(
         channel_model_defaults={},
         _cleanup_conversation=AsyncMock(),
         openrouter_client=SimpleNamespace(
-            get_model=AsyncMock(
-                return_value=mixed_modality_models["google/gemini-3.1-flash-tts-preview"]
-            ),
+            get_model=AsyncMock(return_value=mixed_modality_models["google/gemini-3.8-flash-tts"]),
             create_chat_completion=AsyncMock(),
         ),
     )
@@ -144,7 +142,7 @@ async def test_run_chat_command_rejects_non_text_output_model_before_request(
         await run_chat_command(cog, ctx=ctx, prompt="hello", model="gemini tts")
 
     message = error_embed_factory.call_args.args[0]
-    assert "`google/gemini-3.1-flash-tts-preview` does not advertise text output" in message
+    assert "`google/gemini-3.8-flash-tts` does not advertise text output" in message
     assert "/openrouter-tools tts" in message
     send.assert_awaited_once()
     cog.openrouter_client.create_chat_completion.assert_not_awaited()

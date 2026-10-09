@@ -36,6 +36,7 @@ class ModelInfo:
     input_modalities: list[str] = field(default_factory=list)
     output_modalities: list[str] = field(default_factory=list)
     pricing: ModelPricing = field(default_factory=ModelPricing)
+    supported_voices: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -154,6 +155,11 @@ def parse_model_info(raw_model: dict[str, Any]) -> ModelInfo:
             input_cache_read=_safe_float(pricing_payload.get("input_cache_read")),
             input_cache_write=_safe_float(pricing_payload.get("input_cache_write")),
         ),
+        supported_voices=[
+            voice
+            for voice in raw_model.get("supported_voices") or []
+            if isinstance(voice, str) and voice.strip()
+        ],
     )
 
 
@@ -199,6 +205,25 @@ def extract_usage(response_payload: dict[str, Any]) -> ChatUsage:
         server_tool_use=_coerce_int_mapping(
             usage.get("server_tool_use_details") or usage.get("server_tool_use")
         ),
+    )
+
+
+def extract_generation_usage(generation: dict[str, Any]) -> ChatUsage:
+    """Build a ``ChatUsage`` from a ``GET /generation`` record.
+
+    The record reports the charge as ``total_cost`` (its ``usage`` field is the same
+    amount in USD, not a token object) and the token counts as ``tokens_prompt`` and
+    ``tokens_completion``.
+    """
+    prompt_tokens = _safe_int(generation.get("tokens_prompt"))
+    completion_tokens = _safe_int(generation.get("tokens_completion"))
+    return ChatUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens,
+        cost=_safe_float_or_none(generation.get("total_cost")),
+        is_byok=generation.get("is_byok") is True,
+        upstream_inference_cost=_safe_float_or_none(generation.get("upstream_inference_cost")),
     )
 
 

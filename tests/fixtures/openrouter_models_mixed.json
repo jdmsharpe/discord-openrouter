@@ -1,5 +1,5 @@
 {
-  "_source": "Real entries from keyless GET https://openrouter.ai/api/v1/models?output_modalities=all captured 2026-08-28, one per output-modality shape the live catalog uses; trimmed to the keys parse_model_info reads, descriptions cut to 160 chars.",
+  "_source": "Real entries from keyless GET https://openrouter.ai/api/v1/models?output_modalities=all captured 2026-08-28 (the speech entry google/gemini-3.8-flash-tts captured 2026-10-08), one per output-modality shape the live catalog uses; trimmed to the keys parse_model_info reads, descriptions cut to 160 chars.",
   "data": [
     {
       "id": "bytedance-seed/seedream-5-0-pro",
@@ -132,10 +132,10 @@
       }
     },
     {
-      "id": "google/gemini-3.1-flash-tts-preview",
-      "name": "Google: Gemini 3.1 Flash TTS Preview",
-      "canonical_slug": "google/gemini-3.1-flash-tts-preview",
-      "description": "Gemini 3.1 Flash TTS Preview is a text-to-speech model from Google, and a substantial generational step up from Gemini 2.5 Flash TTS. It takes text input and pr",
+      "id": "google/gemini-3.8-flash-tts",
+      "name": "Google: Gemini 3.8 Flash TTS",
+      "canonical_slug": "google/gemini-3.8-flash-tts-20260922",
+      "description": "Gemini 3.8 Flash TTS is a text-to-speech model from Google and the successor to [Gemini 3.1 Flash TTS Preview](https://openrouter.ai/google/gemini-3.1-flash-tts",
       "context_length": 32768,
       "architecture": {
         "input_modalities": [
@@ -146,9 +146,41 @@
         ]
       },
       "pricing": {
-        "prompt": "0.000001",
-        "completion": "0.00002"
-      }
+        "prompt": "0.0000005",
+        "completion": "0.000009"
+      },
+      "supported_voices": [
+        "Zephyr",
+        "Puck",
+        "Charon",
+        "Kore",
+        "Fenrir",
+        "Leda",
+        "Orus",
+        "Aoede",
+        "Callirrhoe",
+        "Autonoe",
+        "Enceladus",
+        "Iapetus",
+        "Umbriel",
+        "Algieba",
+        "Despina",
+        "Erinome",
+        "Algenib",
+        "Rasalgethi",
+        "Laomedeia",
+        "Achernar",
+        "Alnilam",
+        "Schedar",
+        "Gacrux",
+        "Pulcherrima",
+        "Achird",
+        "Zubenelgenubi",
+        "Vindemiatrix",
+        "Sadachbia",
+        "Sadaltager",
+        "Sulafat"
+      ]
     },
     {
       "id": "cohere/rerank-4-pro",

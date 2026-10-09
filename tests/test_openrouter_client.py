@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import AsyncMock
@@ -571,8 +572,8 @@ def test_list_models_output_filters_cover_every_live_modality(mixed_modality_mod
         "google/gemini-3.1-flash-image",
     ]
     # "audio" also surfaces the dedicated TTS models, which the catalog labels "speech".
-    assert results["audio"] == ["google/gemini-3.1-flash-tts-preview", "openai/gpt-audio"]
-    assert results["speech"] == ["google/gemini-3.1-flash-tts-preview"]
+    assert results["audio"] == ["google/gemini-3.8-flash-tts", "openai/gpt-audio"]
+    assert results["speech"] == ["google/gemini-3.8-flash-tts"]
     assert results["video"] == ["alibaba/happyhorse-1.1"]
     assert results["embeddings"] == ["google/gemini-embedding-2"]
     assert results["transcription"] == ["openai/gpt-transcribe"]
@@ -841,3 +842,498 @@ def test_get_video_generation_and_download_file_bytes(monkeypatch):
     assert content_type == "video/mp4"
     assert _FakeAsyncClient.calls[0]["url"].endswith("/videos/job-123")
     assert _FakeAsyncClient.calls[1]["url"].endswith("/videos/job-123/content?index=0")
+
+
+class _ScriptedHttpResponse:
+    def __init__(self, status_code, *, payload=None, content=b"", headers=None):
+        self.status_code = status_code
+        self._payload = payload
+        self.content = content
+        self.headers = headers or {}
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no JSON body")
+        return self._payload
+
+
+def _install_scripted_http(monkeypatch, responses):
+    """Replace `httpx` in client.py; each request returns the next scripted response."""
+    calls: list[dict] = []
+    queue = list(responses)
+
+    class _FakeAsyncClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, *, headers=None, json=None, params=None):
+            calls.append(
+                {"method": method, "url": url, "headers": headers, "json": json, "params": params}
+            )
+            return queue.pop(0)
+
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_FakeAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
+    )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
+    monkeypatch.setattr(client_module.asyncio, "sleep", AsyncMock())
+    return calls
+
+
+# Shape of a live `/audio/speech` reply from a Gemini TTS model: raw PCM, no JSON body.
+_PCM_SPEECH_HEADERS = {
+    "Content-Type": "audio/pcm;rate=24000;channels=1",
+    "X-Generation-Id": "gen-tts-1",
+}
+_GEMINI_MP3_REJECTION = {
+    "error": {"message": 'Gemini TTS only supports response_format="pcm". Got "mp3".', "code": 400}
+}
+
+
+def test_create_audio_speech_posts_speech_request(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [_ScriptedHttpResponse(200, content=b"\x01\x00\x02\x00", headers=_PCM_SPEECH_HEADERS)],
+    )
+    client = OpenRouterClient(api_key="test-key", app_name="discord-openrouter")
+
+    result = asyncio.run(
+        client.create_audio_speech(
+            model="google/gemini-3.8-flash-tts",
+            input_text="Hello there.",
+            voice="Zephyr",
+            response_format="pcm",
+            instructions="  Speak calmly.  ",
+            user="42",
+            session_id="tts:999",
+        )
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == f"{client_module.OPENROUTER_BASE_URL}/audio/speech"
+    assert calls[0]["headers"]["X-OpenRouter-Title"] == "discord-openrouter"
+    assert calls[0]["json"] == {
+        "model": "google/gemini-3.8-flash-tts",
+        "input": "Hello there.",
+        "response_format": "pcm",
+        "voice": "Zephyr",
+        "instructions": "Speak calmly.",
+        "user": "42",
+        "session_id": "tts:999",
+    }
+    assert result == {
+        "audio_bytes": b"\x01\x00\x02\x00",
+        "content_type": "audio/pcm;rate=24000;channels=1",
+        "response_format": "pcm",
+        "generation_id": "gen-tts-1",
+    }
+
+
+def test_create_audio_speech_omits_blank_voice_and_instructions(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [_ScriptedHttpResponse(200, content=b"ID3", headers={"Content-Type": "audio/mpeg"})],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    asyncio.run(
+        client.create_audio_speech(
+            model="hexgrad/kokoro-82m",
+            input_text="Hi.",
+            voice=None,
+            response_format="mp3",
+            instructions="   ",
+        )
+    )
+
+    assert calls[0]["json"] == {
+        "model": "hexgrad/kokoro-82m",
+        "input": "Hi.",
+        "response_format": "mp3",
+    }
+
+
+def test_create_audio_speech_retries_with_pcm_when_mp3_is_rejected(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [
+            _ScriptedHttpResponse(400, payload=_GEMINI_MP3_REJECTION),
+            _ScriptedHttpResponse(200, content=b"\x00\x00", headers=_PCM_SPEECH_HEADERS),
+            _ScriptedHttpResponse(200, content=b"\x00\x00", headers=_PCM_SPEECH_HEADERS),
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+    kwargs = {
+        "model": "google/gemini-3.8-flash-tts",
+        "input_text": "Hi.",
+        "voice": "Zephyr",
+        "response_format": "mp3",
+    }
+
+    first = asyncio.run(client.create_audio_speech(**kwargs))
+    second = asyncio.run(client.create_audio_speech(**kwargs))
+
+    assert [call["json"]["response_format"] for call in calls] == ["mp3", "pcm", "pcm"]
+    assert first["response_format"] == "pcm"
+    assert second["response_format"] == "pcm"
+
+
+def test_create_audio_speech_raises_other_400s_without_retry(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [
+            _ScriptedHttpResponse(
+                400,
+                payload={
+                    "error": {"message": "An explicit voice is required for this TTS provider."}
+                },
+            )
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    with pytest.raises(OpenRouterApiError, match="explicit voice is required"):
+        asyncio.run(
+            client.create_audio_speech(
+                model="google/gemini-3.8-flash-tts",
+                input_text="Hi.",
+                voice=None,
+                response_format="mp3",
+            )
+        )
+
+    assert len(calls) == 1
+
+
+def test_create_audio_speech_raises_when_pcm_is_rejected(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [
+            _ScriptedHttpResponse(
+                400, payload={"error": {"message": 'Unsupported response_format "pcm".'}}
+            )
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    with pytest.raises(OpenRouterApiError, match="Unsupported response_format"):
+        asyncio.run(
+            client.create_audio_speech(
+                model="vendor/mp3-only-tts", input_text="Hi.", voice="a", response_format="pcm"
+            )
+        )
+
+    assert len(calls) == 1
+
+
+_GENERATION_RECORD = {
+    "data": {
+        "id": "gen-tts-1",
+        "total_cost": 0.001087,
+        "usage": 0.001087,
+        "upstream_inference_cost": 0,
+        "is_byok": False,
+        "tokens_prompt": 13,
+        "tokens_completion": 120,
+        "api_type": "tts",
+    }
+}
+_GENERATION_NOT_FOUND = {"error": {"message": "Generation gen-tts-1 not found", "code": 404}}
+
+
+def test_get_generation_polls_until_the_record_exists(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [
+            _ScriptedHttpResponse(404, payload=_GENERATION_NOT_FOUND),
+            _ScriptedHttpResponse(404, payload=_GENERATION_NOT_FOUND),
+            _ScriptedHttpResponse(200, payload=_GENERATION_RECORD),
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    record = asyncio.run(client.get_generation("gen-tts-1", attempts=4, interval_seconds=1.0))
+
+    assert record == _GENERATION_RECORD["data"]
+    assert len(calls) == 3
+    assert all(call["method"] == "GET" for call in calls)
+    assert calls[0]["url"] == f"{client_module.OPENROUTER_BASE_URL}/generation"
+    assert calls[0]["params"] == {"id": "gen-tts-1"}
+    # Each lookup waits first: the record never exists right after the request.
+    assert [call.args for call in client_module.asyncio.sleep.await_args_list] == [(1.0,)] * 3
+
+
+def test_get_generation_returns_none_when_record_never_appears(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [_ScriptedHttpResponse(404, payload=_GENERATION_NOT_FOUND) for _ in range(4)],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    assert asyncio.run(client.get_generation("gen-tts-1", attempts=4)) is None
+    assert len(calls) == 4
+
+
+def test_get_generation_returns_none_on_other_errors(monkeypatch):
+    calls = _install_scripted_http(
+        monkeypatch, [_ScriptedHttpResponse(401, payload={"error": {"message": "No auth"}})]
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    assert asyncio.run(client.get_generation("gen-tts-1", attempts=4)) is None
+    assert len(calls) == 1
+
+
+def test_create_speech_keeps_the_streamed_chat_audio_payload(monkeypatch):
+    # The `audio` output models (gpt-audio, lyria) stay on streamed chat completions.
+    client = OpenRouterClient(api_key="test-key")
+    stream = AsyncMock(return_value={"audio_bytes": b"x"})
+    monkeypatch.setattr(client, "_stream_audio_completion", stream)
+
+    asyncio.run(
+        client.create_speech(
+            model="openai/gpt-audio",
+            input_text="Hello.",
+            voice="alloy",
+            response_format="flac",
+            modalities=["text", "audio"],
+            instructions="Whisper.",
+            user="42",
+            session_id="tts:999",
+        )
+    )
+
+    assert stream.await_args.args[0] == {
+        "model": "openai/gpt-audio",
+        "messages": [{"role": "user", "content": "Whisper.\n\nText to speak:\nHello."}],
+        "modalities": ["text", "audio"],
+        "audio": {"format": "flac", "voice": "alloy"},
+        "stream": True,
+        "user": "42",
+        "session_id": "tts:999",
+    }
+
+
+def test_error_message_includes_the_provider_message_from_metadata_raw(monkeypatch):
+    raw = json.dumps(
+        {
+            "error": {
+                "message": "Missing required parameter: 'audio.voice'.",
+                "type": "invalid_request_error",
+            }
+        }
+    )
+    _install_scripted_http(
+        monkeypatch,
+        [
+            _ScriptedHttpResponse(
+                400,
+                payload={
+                    "error": {
+                        "message": "Provider returned error",
+                        "code": 400,
+                        "metadata": {"raw": raw, "provider_name": "OpenAI"},
+                    }
+                },
+            )
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    with pytest.raises(OpenRouterApiError) as exc_info:
+        asyncio.run(client.create_chat_completion(model="openai/gpt-audio", messages=[], user="1"))
+
+    assert str(exc_info.value) == (
+        "Provider returned error: Missing required parameter: 'audio.voice'."
+    )
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            {"message": "Provider returned error", "metadata": {"raw": "upstream timed out"}},
+            "Provider returned error: upstream timed out",
+        ),
+        ({"message": "Provider returned error", "metadata": {}}, "Provider returned error"),
+        ({"message": "Rate limited", "metadata": {"raw": None}}, "Rate limited"),
+    ],
+)
+def test_streamed_error_message_reads_metadata_raw(error, expected):
+    from discord_openrouter.cogs.openrouter.client import _extract_error_message_from_bytes
+
+    body = json.dumps({"error": error}).encode()
+
+    assert _extract_error_message_from_bytes(400, body) == expected
+
+
+def test_create_speech_read_aloud_sends_a_system_message_with_instructions(monkeypatch):
+    client = OpenRouterClient(api_key="test-key")
+    stream = AsyncMock(return_value={"audio_bytes": b"x"})
+    monkeypatch.setattr(client, "_stream_audio_completion", stream)
+
+    asyncio.run(
+        client.create_speech(
+            model="openai/gpt-audio-mini",
+            input_text="Hello there.",
+            voice="alloy",
+            response_format="pcm16",
+            modalities=["text", "audio"],
+            instructions="  Whisper.  ",
+            read_aloud=True,
+        )
+    )
+
+    assert stream.await_args.args[0]["messages"] == [
+        {
+            "role": "system",
+            "content": "Read the user's text aloud exactly as written. Do not answer it, add to it"
+            " or comment on it.\nDelivery instructions: Whisper.",
+        },
+        {
+            "role": "user",
+            "content": 'Read this text aloud exactly as written:\n"""\nHello there.\n"""',
+        },
+    ]
+
+
+def test_create_speech_read_aloud_without_instructions(monkeypatch):
+    client = OpenRouterClient(api_key="test-key")
+    stream = AsyncMock(return_value={"audio_bytes": b"x"})
+    monkeypatch.setattr(client, "_stream_audio_completion", stream)
+
+    asyncio.run(
+        client.create_speech(
+            model="openai/gpt-audio-mini",
+            input_text="Hello there.",
+            voice="alloy",
+            response_format="pcm16",
+            read_aloud=True,
+        )
+    )
+
+    assert stream.await_args.args[0]["messages"] == [
+        {"role": "system", "content": client_module.READ_ALOUD_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": 'Read this text aloud exactly as written:\n"""\nHello there.\n"""',
+        },
+    ]
+
+
+@pytest.mark.parametrize("status_code", [429, 500, 503])
+def test_get_generation_does_not_retry_rate_limits_or_server_errors(monkeypatch, status_code):
+    calls = _install_scripted_http(
+        monkeypatch,
+        [
+            _ScriptedHttpResponse(
+                status_code, payload={"error": {"message": "busy"}}, headers={"Retry-After": "60"}
+            )
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    assert asyncio.run(client.get_generation("gen-tts-1", attempts=4)) is None
+    assert len(calls) == 1
+
+
+def test_get_generation_stops_at_the_overall_timeout(monkeypatch):
+    class _HangingAsyncClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, **_kwargs):
+            await asyncio.Event().wait()
+
+    fake_httpx = SimpleNamespace(
+        AsyncClient=_HangingAsyncClient,
+        Timeout=lambda **_kwargs: None,
+        RequestError=client_module.httpx.RequestError,
+    )
+    monkeypatch.setattr(client_module, "httpx", fake_httpx)
+    client = OpenRouterClient(api_key="test-key")
+
+    async def run():
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        record = await client.get_generation(
+            "gen-tts-1", interval_seconds=0.0, overall_timeout_seconds=0.05
+        )
+        return record, loop.time() - started
+
+    record, elapsed = asyncio.run(run())
+
+    assert record is None
+    assert elapsed < 1.0
+    assert client_module.GENERATION_LOOKUP_TIMEOUT_SECONDS == 6.0
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            {"error": {"message": "Quota exceeded for this project."}},
+            "Provider returned error: Quota exceeded for this project.",
+        ),
+        (
+            [{"error": {"code": 400, "message": "Invalid voice name."}}],
+            "Provider returned error: Invalid voice name.",
+        ),
+        (
+            json.dumps([{"error": {"code": 400, "message": "Invalid voice name."}}]),
+            "Provider returned error: Invalid voice name.",
+        ),
+        ({"message": "Model is overloaded."}, "Provider returned error: Model is overloaded."),
+        ([], "Provider returned error"),
+    ],
+)
+def test_error_message_reads_dict_and_list_metadata_raw(raw, expected):
+    from discord_openrouter.cogs.openrouter.client import _extract_error_message_from_bytes
+
+    body = json.dumps({"error": {"message": "Provider returned error", "metadata": {"raw": raw}}})
+
+    assert _extract_error_message_from_bytes(400, body.encode()) == expected
+
+
+def test_collect_audio_stream_decodes_chunks_that_each_carry_padding():
+    # Each chunk encoded on its own, so padding appears in the middle of the joined text.
+    pieces = [b"ab", b"cde", b"f", b"\x00\x01\x02\x03"]
+    lines = [
+        'data: {"choices":[{"delta":{"audio":{"data":"'
+        + base64.b64encode(piece).decode("ascii")
+        + '"}}}]}\n'
+        for piece in pieces
+    ] + ["data: [DONE]\n"]
+
+    result = asyncio.run(_collect_audio_stream(_AsyncLineIterator(lines)))
+
+    assert result["audio_bytes"] == b"".join(pieces)
+
+
+@pytest.mark.parametrize("cut", [1, 2, 3, 5, 6, 7])
+def test_decode_base64_chunks_handles_splits_inside_a_group(cut):
+    from discord_openrouter.cogs.openrouter.client import _decode_base64_chunks
+
+    raw = bytes(range(20))
+    encoded = base64.b64encode(raw).decode("ascii")
+
+    assert _decode_base64_chunks([encoded[:cut], encoded[cut:]]) == raw
+    assert (
+        _decode_base64_chunks([base64.b64encode(b"ab").decode(), encoded[:cut], encoded[cut:]])
+        == b"ab" + raw
+    )

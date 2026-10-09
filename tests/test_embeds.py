@@ -315,7 +315,7 @@ def test_build_model_list_embed_renders_every_live_output_modality(mixed_modalit
     assert len(embed.description) <= 4000
 
     filtered = build_model_list_embed(
-        [mixed_modality_models["google/gemini-3.1-flash-tts-preview"]],
+        [mixed_modality_models["google/gemini-3.8-flash-tts"]],
         query=None,
         output_modality="speech",
     )

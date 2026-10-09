@@ -16,6 +16,7 @@ from discord_openrouter.util import (
     calculate_cost_breakdown,
     describe_chat_settings,
     describe_modalities,
+    extract_generation_usage,
     extract_reasoning_text,
     extract_url_citations,
     extract_usage,
@@ -430,3 +431,45 @@ def test_describe_chat_settings_summarizes_active_options():
         "pdf `mistral-ocr`, context compression off, prompt cache `1h`, "
         "web search, datetime, reasoning `high`"
     )
+
+
+def test_parse_model_info_reads_supported_voices_in_catalog_order(mixed_modality_catalog):
+    parsed = {entry["id"]: parse_model_info(entry) for entry in mixed_modality_catalog}
+
+    voices = parsed["google/gemini-3.8-flash-tts"].supported_voices
+    assert voices[:4] == ["Zephyr", "Puck", "Charon", "Kore"]
+    assert len(voices) == 30
+    # Entries without the key (chat models such as gpt-audio) parse to an empty list.
+    assert parsed["openai/gpt-audio"].supported_voices == []
+
+
+def test_parse_model_info_drops_non_string_and_blank_voices():
+    model = parse_model_info({"id": "m", "supported_voices": ["a", "", "  ", None, 3, "b"]})
+
+    assert model.supported_voices == ["a", "b"]
+
+
+def test_extract_generation_usage_reads_generation_record():
+    usage = extract_generation_usage(
+        {
+            "total_cost": 0.001087,
+            "usage": 0.001087,
+            "upstream_inference_cost": 0,
+            "is_byok": False,
+            "tokens_prompt": 13,
+            "tokens_completion": 120,
+        }
+    )
+
+    assert usage.prompt_tokens == 13
+    assert usage.completion_tokens == 120
+    assert usage.total_tokens == 133
+    assert resolve_request_cost(usage) == 0.001087
+
+
+def test_extract_generation_usage_adds_upstream_cost_for_byok():
+    usage = extract_generation_usage(
+        {"total_cost": 0.0001, "upstream_inference_cost": 0.002, "is_byok": True}
+    )
+
+    assert resolve_request_cost(usage) == pytest.approx(0.0021)

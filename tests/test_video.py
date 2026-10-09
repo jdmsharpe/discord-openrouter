@@ -97,7 +97,7 @@ class TestValidateVideoModelModalities:
         [
             "deepseek/deepseek-v4-flash",
             "bytedance-seed/seedream-5-0-pro",
-            "google/gemini-3.1-flash-tts-preview",
+            "google/gemini-3.8-flash-tts",
         ],
     )
     def test_blocks_live_models_without_video_output(self, mixed_modality_models, model_id):

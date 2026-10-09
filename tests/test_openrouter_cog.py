@@ -266,8 +266,8 @@ class TestSwitchModel:
         cog.conversation_histories[conversation.conversation_id] = conversation
         original_model = conversation.settings.model
         model_info = ModelInfo(
-            id="google/gemini-3.1-flash-tts-preview",
-            name="Gemini 3.1 Flash TTS",
+            id="google/gemini-3.8-flash-tts",
+            name="Gemini 3.8 Flash TTS",
             output_modalities=["speech"],
         )
         cog.openrouter_client.get_model = AsyncMock(return_value=model_info)
@@ -501,3 +501,41 @@ class TestModels:
         assert set(inputs) == {"text", "image", "audio", "video", "file"}
         assert all(outputs.values()), {value: ids for value, ids in outputs.items() if not ids}
         assert all(inputs.values()), {value: ids for value, ids in inputs.items() if not ids}
+
+
+class TestTtsFormatOption:
+    """The tts callback passes `response_format` on only when the user filled it in."""
+
+    def _ctx(self, options):
+        ctx = _make_ctx()
+        ctx.interaction = SimpleNamespace(
+            id=1,
+            data={
+                "name": "openrouter-tools",
+                "options": [{"type": 1, "name": "tts", "options": options}],
+            },
+        )
+        return ctx
+
+    def _call(self, ctx, **kwargs):
+        cog = _make_cog()
+        with patch(
+            "discord_openrouter.cogs.openrouter.cog.run_tts_command", new=AsyncMock()
+        ) as run_tts:
+            asyncio.run(cog.tts.callback(cog, ctx, **kwargs))
+        return run_tts.await_args.kwargs["response_format"]
+
+    def test_default_format_is_passed_as_none(self):
+        ctx = self._ctx([{"type": 3, "name": "input", "value": "hi"}])
+
+        assert self._call(ctx, input="hi") is None
+
+    def test_chosen_format_is_passed_on(self):
+        ctx = self._ctx(
+            [
+                {"type": 3, "name": "input", "value": "hi"},
+                {"type": 3, "name": "response_format", "value": "mp3"},
+            ]
+        )
+
+        assert self._call(ctx, input="hi", response_format="mp3") == "mp3"

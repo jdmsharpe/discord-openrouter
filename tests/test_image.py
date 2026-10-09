@@ -317,7 +317,7 @@ class TestRunImageCommand:
         "model_id",
         [
             "deepseek/deepseek-v4-flash",
-            "google/gemini-3.1-flash-tts-preview",
+            "google/gemini-3.8-flash-tts",
             "alibaba/happyhorse-1.1",
         ],
     )

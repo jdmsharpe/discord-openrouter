@@ -47,7 +47,7 @@ def mixed_modality_catalog() -> list[dict]:
     """Raw catalog entries, one real entry per output-modality shape OpenRouter serves.
 
     Captured from the keyless ``GET /api/v1/models?output_modalities=all`` on
-    2026-08-28 (see ``_source`` in the file), so the parser and every modality
+    2026-08-28, the speech entry on 2026-10-08 (see ``_source`` in the file), so the parser and every modality
     guard run against the real entry shapes -- zero-priced video, per-image
     pricing keys, ``context_length: 0`` transcription models, the ``overrides``
     array -- rather than hand-written stand-ins.

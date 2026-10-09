@@ -626,7 +626,7 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "voice",
-        description="Voice override. (default: model/provider default)",
+        description="Voice name. (default: first catalog voice; alloy for OpenAI audio models; else provider default)",
         required=False,
         type=str,
     )
@@ -638,7 +638,7 @@ class OpenRouterCog(commands.Cog):
     )
     @option(
         "response_format",
-        description="Audio file format. (default: mp3)",
+        description="Audio format. mp3 if the model supports it, else WAV; OpenAI audio models always WAV. (default: mp3)",
         required=False,
         type=str,
         choices=TTS_FORMAT_CHOICES,
@@ -659,7 +659,11 @@ class OpenRouterCog(commands.Cog):
             model=model,
             voice=voice,
             instructions=instructions,
-            response_format=response_format,
+            # py-cord fills in the default when the option is left out; pass None then, so
+            # the reply only says "(requested ...)" for a format the user picked.
+            response_format=(
+                response_format if _option_was_given(ctx, "response_format") else None
+            ),
         )
 
     @openrouter_tools.command(
@@ -698,3 +702,16 @@ class OpenRouterCog(commands.Cog):
             model=model,
             instructions=instructions,
         )
+
+
+# Interaction option types for a subcommand (1) and a subcommand group (2).
+SUBCOMMAND_OPTION_TYPES = (1, 2)
+
+
+def _option_was_given(ctx: ApplicationContext, name: str) -> bool:
+    """Return whether the user filled in option `name`, looking inside subcommand entries."""
+    data = getattr(getattr(ctx, "interaction", None), "data", None)
+    options = data.get("options") if isinstance(data, dict) else None
+    while options and options[0].get("type") in SUBCOMMAND_OPTION_TYPES:
+        options = options[0].get("options")
+    return any(option.get("name") == name for option in options or [])

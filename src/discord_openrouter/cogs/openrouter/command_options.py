@@ -6,6 +6,7 @@ REASONING_EFFORT_CHOICES = [
     OptionChoice(name="Medium", value="medium"),
     OptionChoice(name="High", value="high"),
     OptionChoice(name="Extra High", value="xhigh"),
+    OptionChoice(name="Max", value="max"),
     OptionChoice(name="None", value="none"),
 ]
 
