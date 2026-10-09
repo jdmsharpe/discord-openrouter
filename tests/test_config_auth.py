@@ -123,3 +123,47 @@ def test_app_categories_env_is_normalized_as_csv(monkeypatch):
     auth = _import_fresh_auth_module(monkeypatch)
 
     assert auth.OPENROUTER_APP_CATEGORIES == "productivity,discord bots,ai"
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("  my-secret  ", "my-secret"),
+        ("   ", None),
+        ("", None),
+    ],
+)
+def test_safety_identifier_secret_is_optional_and_stripped(monkeypatch, raw_value, expected):
+    monkeypatch.setenv("SAFETY_IDENTIFIER_SECRET", raw_value)
+
+    auth = _import_fresh_auth_module(monkeypatch)
+
+    secret = auth.SAFETY_IDENTIFIER_SECRET
+    assert secret == expected
+    assert "SAFETY_IDENTIFIER_SECRET" not in auth.REQUIRED_ENV_VARS
+
+
+def test_validate_required_config_rejects_the_api_key_as_safety_secret(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "discord-token")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "dummy-key")
+    monkeypatch.setenv("SAFETY_IDENTIFIER_SECRET", " dummy-key ")
+
+    auth = _import_fresh_auth_module(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="must not equal OPENROUTER_API_KEY") as exc_info:
+        auth.validate_required_config()
+    assert "dummy-key" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("secret", ["separate-secret", None])
+def test_validate_required_config_accepts_a_separate_or_absent_safety_secret(monkeypatch, secret):
+    monkeypatch.setenv("BOT_TOKEN", "discord-token")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "dummy-key")
+    if secret is None:
+        monkeypatch.delenv("SAFETY_IDENTIFIER_SECRET", raising=False)
+    else:
+        monkeypatch.setenv("SAFETY_IDENTIFIER_SECRET", secret)
+
+    auth = _import_fresh_auth_module(monkeypatch)
+
+    auth.validate_required_config()

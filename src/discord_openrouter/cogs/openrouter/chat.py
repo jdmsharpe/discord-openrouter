@@ -53,6 +53,7 @@ from .embeds import (
     error_embed,
 )
 from .image import build_image_assets, build_image_files
+from .safety import build_safety_identifier
 from .state import find_active_conversation, remember_view_state, track_daily_cost
 from .tool_registry import build_runtime_tools
 
@@ -403,7 +404,7 @@ async def _run_conversation_turn(
             top_p=conversation.settings.top_p,
             max_tokens=conversation.settings.max_tokens,
             reasoning_effort=conversation.settings.reasoning_effort,
-            user=str(user_id),
+            user=build_safety_identifier(user_id),
             session_id=str(conversation.conversation_id),
         )
 

@@ -41,6 +41,18 @@ except ModuleNotFoundError:
 
 MIXED_MODALITY_CATALOG_PATH = Path(__file__).parent / "fixtures" / "openrouter_models_mixed.json"
 
+# Fixed HMAC key for the per-user `user` identifier, so request-body assertions do not
+# depend on the BOT_TOKEN or SAFETY_IDENTIFIER_SECRET in a local .env.
+TEST_SAFETY_IDENTIFIER_KEY = b"test-safety-identifier-key"
+
+
+@pytest.fixture(autouse=True)
+def _fixed_safety_identifier_key(monkeypatch):
+    monkeypatch.setattr(
+        "discord_openrouter.cogs.openrouter.safety.SAFETY_IDENTIFIER_KEY",
+        TEST_SAFETY_IDENTIFIER_KEY,
+    )
+
 
 @pytest.fixture(scope="session")
 def mixed_modality_catalog() -> list[dict]:

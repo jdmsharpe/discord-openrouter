@@ -11,6 +11,7 @@ import pytest
 pytest.importorskip("discord")
 
 from discord_openrouter.cogs.openrouter.client import OpenRouterApiError
+from discord_openrouter.cogs.openrouter.safety import build_safety_identifier
 from discord_openrouter.cogs.openrouter.speech import (
     DEFAULT_UPLOAD_LIMIT_BYTES,
     TTS_MAX_CHARS,
@@ -301,7 +302,7 @@ class TestRunTtsCommand:
             voice="Zephyr",
             response_format="mp3",
             instructions=None,
-            user="42",
+            user=build_safety_identifier(42),
             session_id="tts:999",
         )
         assert "no audio data" in error_embed_factory.call_args.args[0]
@@ -626,7 +627,7 @@ class TestRunTtsCommandChatAudio:
             response_format="pcm16",
             modalities=["text", "audio"],
             instructions=None,
-            user="42",
+            user=build_safety_identifier(42),
             session_id="tts:999",
             read_aloud=True,
         )

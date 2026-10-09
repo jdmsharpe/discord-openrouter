@@ -22,6 +22,7 @@ from .auth import (
     OPENROUTER_SITE_URL,
     OPENROUTER_TTS_MODEL,
     OPENROUTER_VIDEO_MODEL,
+    SAFETY_IDENTIFIER_SECRET,
     SHOW_COST_EMBEDS,
     validate_required_config,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "OPENROUTER_SITE_URL",
     "OPENROUTER_TTS_MODEL",
     "OPENROUTER_VIDEO_MODEL",
+    "SAFETY_IDENTIFIER_SECRET",
     "SHOW_COST_EMBEDS",
     "validate_required_config",
 ]

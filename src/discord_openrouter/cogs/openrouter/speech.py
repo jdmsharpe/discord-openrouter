@@ -27,6 +27,7 @@ from .attachments import MAX_ATTACHMENT_SIZE, AttachmentInputError, build_user_c
 from .client import OpenRouterApiError
 from .embed_delivery import send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
+from .safety import build_safety_identifier
 from .state import track_daily_cost
 
 logger = logging.getLogger(__name__)
@@ -366,7 +367,7 @@ async def _synthesize_with_speech_endpoint(
         voice=resolved_voice,
         response_format=requested_format,
         instructions=instructions,
-        user=str(ctx.author.id),
+        user=build_safety_identifier(ctx.author.id),
         session_id=f"tts:{ctx.interaction.id}",
     )
     audio_bytes = response_payload.get("audio_bytes") or b""
@@ -418,7 +419,7 @@ async def _synthesize_with_chat_audio(
         response_format="pcm16" if streams_pcm16 else response_format,
         modalities=_resolve_audio_modalities(model_info),
         instructions=instructions,
-        user=str(ctx.author.id),
+        user=build_safety_identifier(ctx.author.id),
         session_id=f"tts:{ctx.interaction.id}",
         read_aloud=model_id.startswith(CHAT_AUDIO_READ_ALOUD_MODEL_PREFIXES),
     )
@@ -618,7 +619,7 @@ async def run_stt_command(
         response_payload = await cog.openrouter_client.create_chat_completion(
             model=resolved_model,
             messages=[{"role": "user", "content": user_content}],
-            user=str(ctx.author.id),
+            user=build_safety_identifier(ctx.author.id),
             session_id=f"stt:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:

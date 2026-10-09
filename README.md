@@ -139,6 +139,16 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | Seconds to cache the model catalog fetched from `/models/user?output_modalities=all` (Default: `300`) |
 | `SHOW_COST_EMBEDS` | No | Show usage/cost embeds (Default: `true`) |
 | `LOG_FORMAT` | No | `text` (default) for human-readable logs, or `json` for structured JSON-lines output with per-request IDs |
+| `SAFETY_IDENTIFIER_SECRET` | No | HMAC key for the per-user `user` identifier sent to OpenRouter (Default: a key derived from `BOT_TOKEN`) |
+
+#### User Identifier Sent to OpenRouter
+
+Chat (including follow-up messages and regenerations), image, text-to-speech and speech-to-text requests carry OpenRouter's `user` field, so OpenRouter can isolate abuse to one Discord user instead of the whole account. The value is a 64-character hex HMAC-SHA256 of the Discord user ID; OpenRouter never receives the user ID itself and cannot reverse the value without the key.
+
+- The key is `SAFETY_IDENTIFIER_SECRET` when set, otherwise a key derived from `BOT_TOKEN`. It is never derived from `OPENROUTER_API_KEY`, which OpenRouter holds, and the bot refuses to start when `SAFETY_IDENTIFIER_SECRET` equals `OPENROUTER_API_KEY`. With neither `SAFETY_IDENTIFIER_SECRET` nor `BOT_TOKEN` set, no identifier is sent.
+- discord-openai, discord-grok and discord-claude compute the identifier the same way from the same variables, so a user gets the same value from each bot that shares the secret (or the bot token).
+- The value stays the same for a user while the key stays the same. Rotating `BOT_TOKEN` without setting `SAFETY_IDENTIFIER_SECRET` gives every user a new value; set the secret to any long random string (for example `python -c "import secrets; print(secrets.token_hex(32))"`) to keep values stable across token rotations.
+- `/openrouter-media video` requests carry no `user` field.
 
 ### Running the Bot
 

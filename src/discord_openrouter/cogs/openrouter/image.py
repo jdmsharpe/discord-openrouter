@@ -21,6 +21,7 @@ from .attachments import AttachmentInputError, build_attachment_parts, build_use
 from .client import OpenRouterApiError
 from .embed_delivery import send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
+from .safety import build_safety_identifier
 from .state import track_daily_cost
 
 
@@ -113,7 +114,7 @@ async def run_image_command(
             messages=[{"role": "user", "content": user_content}],
             modalities=modalities,
             image_config=image_config or None,
-            user=str(ctx.author.id),
+            user=build_safety_identifier(ctx.author.id),
             session_id=f"image:{ctx.interaction.id}",
         )
     except OpenRouterApiError as error:
