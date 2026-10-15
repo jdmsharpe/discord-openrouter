@@ -84,6 +84,31 @@ class TestKeyDerivation:
         assert derive_safety_identifier_key("", "") is None
 
     @pytest.mark.parametrize(
+        ("secret", "bot_token", "expected"),
+        [
+            pytest.param(
+                None,
+                "tok",
+                "e4c4e9a56e63186621396e88847c96bf5ebd4caae31c5b1097c7933eb939c85e",
+                id="bot-token-fallback",
+            ),
+            pytest.param(
+                "shared-secret",
+                "tok",
+                "1f4ae57d70d012644d5b186e086ba1651888e8dbb7cc311b6f9fefee5dc8862f",
+                id="secret-set",
+            ),
+        ],
+    )
+    def test_fixed_vectors_shared_with_sibling_bots(self, monkeypatch, secret, bot_token, expected):
+        """The same literal values discord-claude, discord-openai and discord-grok
+        produce for user 111222333, so a change to how the key or the user ID is
+        encoded fails here instead of giving one user different values per bot."""
+        key = derive_safety_identifier_key(secret, bot_token)
+        monkeypatch.setattr(safety, "SAFETY_IDENTIFIER_KEY", key)
+        assert build_safety_identifier(111222333) == expected
+
+    @pytest.mark.parametrize(
         ("secret", "bot_token", "expected_key"),
         [
             pytest.param("env-secret", "env-bot-token", b"env-secret", id="secret-set"),

@@ -54,6 +54,7 @@ Generate a video from a text prompt, with an optional reference image.
 
 - **Options:** Customizable `aspect_ratio`, `resolution`, `size` (exact dimensions like `1280x720`), `duration`, `generate_audio`, and `seed`.
 - Polled asynchronously server-side until complete, then downloaded and attached to the channel.
+- A video too large to attach is linked instead; anyone who can see the message can download it until the links expire.
 
 ### `/openrouter-tools tts`
 
@@ -128,7 +129,7 @@ python -m pip install -e ".[dev]"
 | `GUILD_IDS` | **Yes** | Comma-separated Discord server IDs |
 | `OPENROUTER_API_KEY` | **Yes** | Your OpenRouter API key |
 | `OPENROUTER_DEFAULT_TEXT_MODEL` | No | Global fallback text model (Default: `deepseek/deepseek-v4-flash`) |
-| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `google/gemini-3.1-flash-image`) |
+| `OPENROUTER_DEFAULT_IMAGE_MODEL` | No | Default model for `/openrouter-media image` (Default: `google/gemini-nano-banana-2.1`) |
 | `OPENROUTER_DEFAULT_VIDEO_MODEL` | No | Default model for `/openrouter-media video` (Default: `alibaba/happyhorse-1.1`) |
 | `OPENROUTER_DEFAULT_TTS_MODEL` | No | Default model for `/openrouter-tools tts` (Default: `google/gemini-3.8-flash-tts`) |
 | `OPENROUTER_DEFAULT_STT_MODEL` | No | Default model for `/openrouter-tools stt` (Default: `openai/gpt-audio`) |

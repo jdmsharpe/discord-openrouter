@@ -95,7 +95,7 @@ def test_validate_model_output_modalities_allows_text_capable_and_unknown_models
     for model_id in (
         "deepseek/deepseek-v4-flash",
         "anthropic/claude-sonnet-4.5",
-        "google/gemini-3.1-flash-image",
+        "google/gemini-nano-banana-2.1",
         "openai/gpt-audio",
     ):
         assert validate_model_output_modalities(mixed_modality_models[model_id]) is None

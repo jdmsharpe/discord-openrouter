@@ -23,7 +23,12 @@ from ...util import (
     sanitize_assistant_message,
     truncate_text,
 )
-from .attachments import MAX_ATTACHMENT_SIZE, AttachmentInputError, build_user_content
+from .attachments import (
+    MAX_ATTACHMENT_SIZE,
+    AttachmentInputError,
+    build_user_content,
+    upload_limit_bytes,
+)
 from .client import OpenRouterApiError
 from .embed_delivery import send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
@@ -52,8 +57,6 @@ CHAT_AUDIO_PCM16_MODEL_PREFIXES = ("openai/",)
 # Lyria, the other `audio` output family, generates music from a prompt and does not.
 CHAT_AUDIO_READ_ALOUD_MODEL_PREFIXES = ("openai/",)
 CHAT_AUDIO_DEFAULT_VOICES = {"openai/": "alloy"}
-# Upload limit used when neither the interaction nor the guild reports one.
-DEFAULT_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024
 SPEECH_MEDIA_TYPE_FORMATS = {
     "audio/mpeg": "mp3",
     "audio/mp3": "mp3",
@@ -231,7 +234,7 @@ async def run_tts_command(
         )
 
     extension = "ogg" if file_format == "opus" else file_format
-    upload_limit = _upload_limit_bytes(ctx)
+    upload_limit = upload_limit_bytes(ctx)
     if len(result.audio_bytes) <= upload_limit:
         await send_embed_batches(
             ctx.followup.send,
@@ -262,21 +265,6 @@ async def run_tts_command(
             )
         else:
             await send_embed_batches(ctx.followup.send, file=part_file, logger=cog.logger)
-
-
-def _upload_limit_bytes(ctx: ApplicationContext) -> int:
-    """Return the upload limit for this reply.
-
-    Discord sends the limit with each interaction (`attachment_size_limit`); the guild's
-    `filesize_limit` and then `DEFAULT_UPLOAD_LIMIT_BYTES` are used when it is missing.
-    """
-    for limit in (
-        getattr(getattr(ctx, "interaction", None), "attachment_size_limit", None),
-        getattr(getattr(ctx, "guild", None), "filesize_limit", None),
-    ):
-        if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0:
-            return limit
-    return DEFAULT_UPLOAD_LIMIT_BYTES
 
 
 def _format_mib(size: int) -> str:

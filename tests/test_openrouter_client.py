@@ -564,12 +564,12 @@ def test_list_models_output_filters_cover_every_live_modality(mixed_modality_mod
     assert results["text"] == [
         "anthropic/claude-sonnet-4.5",
         "deepseek/deepseek-v4-flash",
-        "google/gemini-3.1-flash-image",
+        "google/gemini-nano-banana-2.1",
         "openai/gpt-audio",
     ]
     assert results["image"] == [
         "bytedance-seed/seedream-5-0-pro",
-        "google/gemini-3.1-flash-image",
+        "google/gemini-nano-banana-2.1",
     ]
     # "audio" also surfaces the dedicated TTS models, which the catalog labels "speech".
     assert results["audio"] == ["google/gemini-3.8-flash-tts", "openai/gpt-audio"]

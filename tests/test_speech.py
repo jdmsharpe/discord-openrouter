@@ -10,10 +10,13 @@ import pytest
 
 pytest.importorskip("discord")
 
+from discord_openrouter.cogs.openrouter.attachments import (
+    DEFAULT_UPLOAD_LIMIT_BYTES,
+    upload_limit_bytes,
+)
 from discord_openrouter.cogs.openrouter.client import OpenRouterApiError
 from discord_openrouter.cogs.openrouter.safety import build_safety_identifier
 from discord_openrouter.cogs.openrouter.speech import (
-    DEFAULT_UPLOAD_LIMIT_BYTES,
     TTS_MAX_CHARS,
     _audio_format_for_stt,
     _build_stt_prompt,
@@ -23,7 +26,6 @@ from discord_openrouter.cogs.openrouter.speech import (
     _resolve_transcript,
     _speech_audio_file,
     _split_wav,
-    _upload_limit_bytes,
     _uses_speech_endpoint,
     run_stt_command,
     run_tts_command,
@@ -851,10 +853,10 @@ class TestRunTtsCommandUploadLimit:
 
     def test_direct_messages_use_the_default_limit(self):
         assert DEFAULT_UPLOAD_LIMIT_BYTES == 10_485_760
-        assert _upload_limit_bytes(SimpleNamespace()) == 10_485_760
-        assert _upload_limit_bytes(SimpleNamespace(guild=None)) == 10_485_760
+        assert upload_limit_bytes(SimpleNamespace()) == 10_485_760
+        assert upload_limit_bytes(SimpleNamespace(guild=None)) == 10_485_760
         assert (
-            _upload_limit_bytes(SimpleNamespace(guild=SimpleNamespace(filesize_limit=26_214_400)))
+            upload_limit_bytes(SimpleNamespace(guild=SimpleNamespace(filesize_limit=26_214_400)))
             == 26_214_400
         )
 
@@ -989,6 +991,6 @@ def test_upload_limit_prefers_the_interaction_limit():
         interaction=SimpleNamespace(id=1, attachment_size_limit=52_428_800),
         guild=SimpleNamespace(filesize_limit=10_485_760),
     )
-    assert _upload_limit_bytes(ctx) == 52_428_800
+    assert upload_limit_bytes(ctx) == 52_428_800
     ctx.interaction.attachment_size_limit = None
-    assert _upload_limit_bytes(ctx) == 10_485_760
+    assert upload_limit_bytes(ctx) == 10_485_760

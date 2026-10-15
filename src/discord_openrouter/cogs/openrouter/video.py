@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import math
 import mimetypes
 import time
 from typing import Any
@@ -12,14 +13,20 @@ from discord import ApplicationContext, Attachment, Colour, Embed, File, HTTPExc
 from ...config import OPENROUTER_DEFAULT_VIDEO_MODEL, SHOW_COST_EMBEDS
 from ...cost_line import count_label
 from ...util import extract_usage, resolve_request_cost
-from .attachments import AttachmentInputError, build_attachment_parts
+from .attachments import AttachmentInputError, build_attachment_parts, upload_limit_bytes
 from .client import OpenRouterApiError
-from .embed_delivery import send_embed_batches
+from .embed_delivery import DISCORD_EMBED_TOTAL_LIMIT, count_embed_chars, send_embed_batches
 from .embeds import append_flat_pricing_embed, error_embed
 from .state import track_daily_cost
 
 VIDEO_GENERATION_TIMEOUT_SECONDS = 600
 VIDEO_POLL_INTERVAL_SECONDS = 15
+# Statuses after which a job no longer changes (OpenRouter's VideoGenerationResponse
+# `status` enum is pending, in_progress, completed, failed, cancelled, expired).
+VIDEO_ENDED_WITHOUT_VIDEO_STATUSES = frozenset({"cancelled", "expired"})
+VIDEO_TERMINAL_STATUSES = frozenset({"completed", "failed"}) | VIDEO_ENDED_WITHOUT_VIDEO_STATUSES
+VIDEO_DOWNLOAD_LINK_LIMIT = 10
+EMBED_FIELD_VALUE_LIMIT = 1024
 
 
 async def run_video_command(
@@ -160,11 +167,7 @@ async def run_video_command(
         )
         return
 
-    unsigned_urls = [
-        url
-        for url in (status_response.get("unsigned_urls") or [])
-        if isinstance(url, str) and url.strip()
-    ]
+    unsigned_urls = _url_list(status_response.get("unsigned_urls"))
     if not unsigned_urls:
         await send_embed_batches(
             ctx.followup.send,
@@ -221,26 +224,33 @@ async def run_video_command(
             ),
         )
 
-    files = [
-        File(io.BytesIO(video_bytes), filename=filename) for filename, video_bytes in video_assets
+    upload_limit = upload_limit_bytes(ctx)
+    oversized = [
+        (filename, len(video_bytes))
+        for filename, video_bytes in video_assets
+        if len(video_bytes) > upload_limit
     ]
-    try:
-        if files:
-            await send_embed_batches(
-                ctx.followup.send,
-                embeds=embeds,
-                files=files,
-                logger=cog.logger,
-            )
+    if oversized:
+        cog.logger.info(
+            "Generated video is above the %s-byte upload limit; posting download links: %s",
+            upload_limit,
+            oversized,
+        )
+    elif video_assets:
+        files = [
+            File(io.BytesIO(video_bytes), filename=filename)
+            for filename, video_bytes in video_assets
+        ]
+        # A direct send, so a rejected upload raises here and the links below are posted.
+        try:
+            await ctx.followup.send(embeds=embeds, files=files)
             return
-    except HTTPException as error:
-        cog.logger.warning("Failed to upload generated videos to Discord: %s", error, exc_info=True)
+        except HTTPException as error:
+            cog.logger.warning(
+                "Failed to upload generated videos to Discord: %s", error, exc_info=True
+            )
 
-    download_links = "\n".join(
-        f"{index}. [Video {index}]({url})" for index, url in enumerate(unsigned_urls[:10], start=1)
-    )
-    if download_links:
-        embeds[0].add_field(name="Downloads", value=download_links, inline=False)
+    _add_download_fields(embeds, _build_download_fields(status_response))
     await send_embed_batches(ctx.followup.send, embeds=embeds, logger=cog.logger)
 
 
@@ -259,7 +269,7 @@ async def _poll_until_complete(
         "status": status,
     }
 
-    while status not in {"completed", "failed"}:
+    while status not in VIDEO_TERMINAL_STATUSES:
         if time.monotonic() - start_time > VIDEO_GENERATION_TIMEOUT_SECONDS:
             raise TimeoutError("Video generation timed out after 10 minutes.")
         await asyncio.sleep(VIDEO_POLL_INTERVAL_SECONDS)
@@ -271,6 +281,12 @@ async def _poll_until_complete(
 
     if status == "failed":
         error_message = _coerce_str(latest_payload.get("error")) or "Video generation failed."
+        raise OpenRouterApiError(error_message)
+    if status in VIDEO_ENDED_WITHOUT_VIDEO_STATUSES:
+        error_message = f"The video job ended with status `{status}`; no video was returned."
+        details = _coerce_str(latest_payload.get("error"))
+        if details:
+            error_message = f"{error_message} {details}"
         raise OpenRouterApiError(error_message)
     return latest_payload
 
@@ -293,6 +309,96 @@ async def _download_video_assets(
         filename = f"{job_id}_{index}.{_guess_video_extension(url, content_type)}"
         assets.append((filename, video_bytes))
     return assets
+
+
+def _url_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [url.strip() for url in value if isinstance(url, str) and url.strip()]
+
+
+def _build_download_fields(status_response: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return the embed fields that link to the videos when they could not be attached.
+
+    OpenRouter's signed `urls` work without an API key until `expires_at`, so anyone who
+    can see the message can download the video. `unsigned_urls` need the API key in the
+    `Authorization` header, so they are posted only when `urls` is absent or empty.
+    """
+    signed_urls = _url_list(status_response.get("urls"))
+    if signed_urls:
+        urls = signed_urls
+        expires_at = _coerce_unix_seconds(status_response.get("expires_at"))
+        if expires_at is not None:
+            note = (
+                "Anyone who can see this message can download the video from these links "
+                f"until <t:{expires_at}:f> (<t:{expires_at}:R>)."
+            )
+        else:
+            note = (
+                "Anyone who can see this message can download the video from these links "
+                "until OpenRouter deletes its stored copy."
+            )
+    else:
+        urls = _url_list(status_response.get("unsigned_urls"))
+        note = (
+            "These links need an OpenRouter API key in the `Authorization` header; "
+            "opening one in a browser returns an authentication error."
+        )
+    if not urls:
+        return []
+
+    lines = [
+        f"{index}. [Video {index}]({url})"
+        for index, url in enumerate(urls[:VIDEO_DOWNLOAD_LINK_LIMIT], start=1)
+    ]
+    fields = [
+        ("Downloads" if index == 0 else "Downloads (continued)", value)
+        for index, value in enumerate(_pack_field_values(lines))
+    ]
+    fields.append(("Link access", note))
+    return fields
+
+
+def _add_download_fields(embeds: list[Embed], fields: list[tuple[str, str]]) -> None:
+    """Add the link fields to the video embed, keeping every embed within Discord's limit.
+
+    A field that would take an embed past `DISCORD_EMBED_TOTAL_LIMIT` characters starts a
+    new embed, placed after the ones already holding links and before the cost embed.
+    `send_embed_batches` then splits the embeds into messages that fit.
+    """
+    target = embeds[0]
+    position = 1
+    for name, value in fields:
+        if count_embed_chars(target) + len(name) + len(value) > DISCORD_EMBED_TOTAL_LIMIT:
+            target = Embed(color=Colour.blue())
+            embeds.insert(position, target)
+            position += 1
+        target.add_field(name=name, value=value, inline=False)
+
+
+def _pack_field_values(lines: list[str]) -> list[str]:
+    """Join lines into values that each fit in one embed field."""
+    values: list[str] = []
+    current = ""
+    for line in lines:
+        candidate = f"{current}\n{line}" if current else line
+        if current and len(candidate) > EMBED_FIELD_VALUE_LIMIT:
+            values.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        values.append(current)
+    return values
+
+
+def _coerce_unix_seconds(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    seconds = int(value)
+    return seconds if seconds > 0 else None
 
 
 def _is_image_attachment(attachment: Attachment) -> bool:

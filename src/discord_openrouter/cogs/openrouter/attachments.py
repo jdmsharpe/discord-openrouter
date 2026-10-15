@@ -9,6 +9,8 @@ from typing import Any, Protocol
 import httpx
 
 MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024
+# Upload limit used when neither the interaction nor the guild reports one.
+DEFAULT_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 60.0
 
 AUDIO_FORMAT_ALIASES = {
@@ -28,6 +30,21 @@ class AttachmentLike(Protocol):
     url: str
     size: int
     content_type: str | None
+
+
+def upload_limit_bytes(ctx: Any) -> int:
+    """Return the largest file the bot can attach to its reply to this command.
+
+    Discord sends the limit with each interaction (`attachment_size_limit`); the guild's
+    `filesize_limit` and then `DEFAULT_UPLOAD_LIMIT_BYTES` are used when it is missing.
+    """
+    for limit in (
+        getattr(getattr(ctx, "interaction", None), "attachment_size_limit", None),
+        getattr(getattr(ctx, "guild", None), "filesize_limit", None),
+    ):
+        if isinstance(limit, int) and not isinstance(limit, bool) and limit > 0:
+            return limit
+    return DEFAULT_UPLOAD_LIMIT_BYTES
 
 
 class AttachmentInputError(RuntimeError):
