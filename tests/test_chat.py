@@ -14,6 +14,7 @@ from discord_openrouter.cogs.openrouter.chat import (
     _run_conversation_turn,
     _validate_model_input_modalities,
     _validate_prompt_cache_request,
+    handle_new_message_in_conversation,
     run_chat_command,
     validate_model_output_modalities,
 )
@@ -439,3 +440,48 @@ async def test_run_conversation_turn_cost_line_and_daily_total_follow_byok_rule(
     assert cost_embed.description == expected_line
     [(daily_total, _)] = cog.daily_costs.values()
     assert daily_total == pytest.approx(expected_cost)
+
+
+def _follow_up_conversation_and_message(*, content: str, stickers: list):
+    conversation = Conversation(
+        conversation_id=123,
+        conversation_starter_id=456,
+        channel_id=789,
+        settings=ChatSettings(model="openai/test"),
+    )
+    message = SimpleNamespace(
+        author=SimpleNamespace(id=456),
+        channel=SimpleNamespace(),
+        content=content,
+        attachments=[],
+        stickers=stickers,
+        reply=AsyncMock(),
+    )
+    return conversation, message
+
+
+@pytest.mark.asyncio
+async def test_sticker_only_follow_up_sends_the_sticker_name():
+    """A sticker-only message has no text and no attachments; it used to be dropped
+    without a reply, and the sticker's name is now the follow-up's text."""
+    conversation, message = _follow_up_conversation_and_message(
+        content="", stickers=[SimpleNamespace(name="EEYUP")]
+    )
+
+    with patch.object(chat, "_run_conversation_turn", AsyncMock(return_value=True)) as run_turn:
+        await handle_new_message_in_conversation(SimpleNamespace(), message, conversation)
+
+    run_turn.assert_awaited_once()
+    assert conversation.messages == [{"role": "user", "content": "[Sticker: EEYUP]"}]
+
+
+@pytest.mark.asyncio
+async def test_follow_up_with_nothing_to_send_is_ignored():
+    """A message with no text, no sticker and no attachment sends no request."""
+    conversation, message = _follow_up_conversation_and_message(content="", stickers=[])
+
+    with patch.object(chat, "_run_conversation_turn", AsyncMock()) as run_turn:
+        await handle_new_message_in_conversation(SimpleNamespace(), message, conversation)
+
+    run_turn.assert_not_awaited()
+    assert conversation.messages == []

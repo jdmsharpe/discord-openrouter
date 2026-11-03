@@ -16,6 +16,7 @@ from discord import (
 )
 
 from ...config import OPENROUTER_DEFAULT_PDF_ENGINE, OPENROUTER_DEFAULT_TEXT_MODEL, SHOW_COST_EMBEDS
+from ...stickers import text_with_stickers
 from ...util import (
     ChatSettings,
     Conversation,
@@ -300,7 +301,9 @@ async def handle_new_message_in_conversation(
             )
             return
 
-    user_content = build_user_content(message.content, attachment_parts)
+    user_content = build_user_content(
+        text_with_stickers(message.content, message.stickers), attachment_parts
+    )
     if not user_content:
         return
 
