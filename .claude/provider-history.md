@@ -4,6 +4,14 @@ Evidence behind the rules in [CLAUDE.md](CLAUDE.md): probe results, dates, token
 
 When a change needs new evidence, add it here under the matching heading (or a new one) and keep the CLAUDE.md bullet to the rule, the constants to keep aligned and the guarding test.
 
+## SDK sweep log
+
+### 2026-11-10
+
+- Rechecked the raw-httpx client and public/keyed catalogs (718 / 683 models); all five defaults are present in both, including image, video and STT. Carbon and Fable 5.2 are available through the dynamic catalog; no SDK is introduced.
+- Re-ran the default image request after the earlier account ZDR restriction; Nano Banana 2.1 now succeeds via Google AI Studio (one image, 6.6 seconds, reported cost $0.034452).
+- Existing text and media defaults remain unchanged; `openai/gpt-audio` has an upstream shutdown on 2027-01-20, so recheck OpenRouter routing before the scheduled migration.
+
 ## Provider notes
 
 ### Raw httpx client
@@ -82,3 +90,7 @@ When a change needs new evidence, add it here under the matching heading (or a n
 ### Stickers are sent as text
 
 - **Stickers are sent as text (v1.9.2).** A Discord sticker arrives with empty `content` and no `attachments`; `handle_new_message_in_conversation` (`chat.py`) sends each sticker in `message.stickers` as a `[Sticker: <name>]` line after the message text, built by `text_with_stickers` in `stickers.py`, which is byte-identical in the five AI bots (change all five together). The sticker image is not sent. A follow-up with nothing to send (no text, no sticker, no attachment that yields content) is ignored and the conversation stays open. Before, discord-openai, discord-gemini and discord-claude sent an empty turn, got a 400, and the error path removed the conversation; discord-grok and discord-openrouter dropped a sticker-only message without a reply. Pinned by `tests/test_stickers.py` and the sticker follow-up tests in `tests/test_chat.py`.
+
+### An account that requires Zero Data Retention
+
+2026-11-06: the keyed catalog excluded the image, video and STT defaults and image generation failed with a ZDR-policy error. 2026-11-10: keyed lookup returned `google/gemini-nano-banana-2.1`, and the same bot client generated an image successfully (8 input / 1,232 output tokens, including 1,120 image tokens). This supersedes the earlier image blockage; no account settings were changed by this sweep.
