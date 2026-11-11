@@ -14,21 +14,22 @@
 
 ## Overview
 
-A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a unified interface for stateful multi-turn chat, dynamic model switching, and extensive multimodal inputs. It supports image, video, and audio generation, advanced reasoning preservation, and interactive conversation tools without ever losing your thread. Every request goes to OpenRouter's REST API directly over `httpx`; the bot does not depend on the OpenRouter Python SDK.
+A Discord bot for the OpenRouter API, built on Pycord 2.0. It provides chat with any OpenRouter model, image and video generation, text-to-speech and speech-to-text through slash commands.
 
 ## Features
 
-- **Multi-turn Conversations:** Persistent conversation history with interactive button controls (regenerate, pause/resume, stop) and explicit context compression to help long conversations fit smaller context windows.
-- **Multiple OpenRouter Models:** Seamlessly discover, query, and switch models on the fly using OpenRouter's expansive catalog. The catalog is fetched with `output_modalities=all`, so image, speech, transcription, video, embeddings, and rerank models are listed alongside the text models. Save per-channel defaults or rely on global fallbacks.
-- **Multimodal Input:** Supports text, images, PDFs, audio, video, and general file inputs using OpenRouter's normalized multimodal API. Features dedicated PDF parsing controls (`cloudflare-ai`, `mistral-ocr`, `native`).
-- **Advanced Tool Calling:** Built-in support for OpenRouter's server tools (`openrouter:web_search`, `openrouter:datetime`). Turn tools on or off mid-conversation via an interactive dropdown.
-- **Reasoning Configuration:** Customizable reasoning effort levels (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) for supported models. Automatically preserves `reasoning_details` in assistant messages so models can continue their chain-of-thought across turns.
-- **Rich Embeds & Usage Tracking:** Each response ends with a one-line cost summary: the request cost (as reported, or an `est.`-prefixed local estimate), input and output tokens with their cached and thinking counts, web searches, and your total for the day. Web search citations are surfaced cleanly via a Sources embed.
-- **Media Generation:**
-  - **Images:** High-quality image generation and remixing/editing using models that advertise image output.
-  - **Video:** Asynchronous text-to-video and image-to-video generation via OpenRouter's `/videos` API.
-  - **Text-to-Speech:** Convert text into spoken audio files.
-  - **Speech-to-Text:** Transcribe uploaded audio files using audio-input models.
+- **Chat:** Multi-turn conversations with any OpenRouter model that outputs text. Messages you send in the channel continue the conversation, and context compression helps long conversations fit smaller context windows.
+- **Model catalog:** Search the catalog, switch a conversation's model, and save per-channel defaults. The catalog lists image, speech, transcription, video, embedding and rerank models alongside text models.
+- **Attachments:** Text, images, PDFs, audio, video and other files. PDFs can use the `cloudflare-ai`, `mistral-ocr` or `native` parser.
+- **Reasoning:** Reasoning effort from `none` to `max` on models that support it. Reasoning details are kept across turns.
+- **Built-in tools:** OpenRouter's `web_search` and `datetime` server tools.
+- **Citations:** Web search citations appear in a Sources embed.
+- **Media generation:**
+  - **Images:** Generation and editing with any model that outputs images.
+  - **Video:** Text-to-video and image-to-video through OpenRouter's `/videos` API.
+  - **Text-to-speech:** Dedicated TTS models and audio chat models.
+  - **Speech-to-text:** Transcription with audio-input models.
+- **Cost line:** Each reply ends with a line such as `$0.0031 · 2.3k in (512 cached) / 441 out (66 thinking) · 1 search · $0.09 today`: the cost OpenRouter reports (prefixed `est.` when the bot estimates it from catalog prices), input tokens (cached in parentheses), output tokens (thinking in parentheses), web searches and your total for the day. BYOK requests include what your provider key is billed. Set `SHOW_COST_EMBEDS=false` to hide it.
 
 ## Commands
 
@@ -36,52 +37,67 @@ A Discord bot built on Pycord 2.0 that integrates OpenRouter's API, providing a 
 
 Start a conversation with an OpenRouter model.
 
-- Features tool enablement mid-conversation via a dropdown.
-- Supports Anthropic-style prompt caching explicitly via `prompt_cache_ttl` (`5m` or `1h`).
-- Includes tuning options like `temperature`, `top_p`, `max_tokens`, `reasoning_effort`, and `pdf_engine`.
-- Rejects models that don't advertise text output (image-only, speech, transcription, video, embeddings, rerank) before any request is sent, pointing you to the matching `/openrouter-media` or `/openrouter-tools` command where one exists.
+- **`prompt` (required):** Your first message.
+- **`persona`:** System prompt (default: "You are a helpful assistant.").
+- **`model`:** Model slug (default: the channel's saved model, then `OPENROUTER_DEFAULT_TEXT_MODEL`). A model without text output is refused before the request, with a pointer to the matching media or tools command.
+- **`pdf_engine`:** PDF parser: `cloudflare-ai`, `mistral-ocr` or `native`.
+- **`attachment`:** An image, PDF, audio, video or other file.
+- **`temperature` / `top_p` / `max_tokens`:** Sampling and output limit.
+- **`context_compression`:** Override OpenRouter's context compression.
+- **`prompt_cache_ttl`:** Anthropic prompt caching TTL (`5m` or `1h`).
+- **`reasoning_effort`:** Reasoning effort on models that support it.
+- **`web_search` / `datetime`:** Enable OpenRouter server tools (default: off).
+
+### `/openrouter switch_model`
+
+Switch the conversation's model, save it as the channel default, or both (`scope`: `conversation`, `channel` or `both`). `modality` picks which command's model to change (default: `chat`).
+
+### `/openrouter models`
+
+Search the OpenRouter catalog, with optional `input_modality` and `output_modality` filters.
+
+### `/openrouter current_model`
+
+Show the conversation's model, the channel default and the global fallback.
 
 ### `/openrouter-media image`
 
-Generate a new image or remix an uploaded one.
+Generate an image from a prompt, or edit an attached image.
 
-- **Options:** Customizable `aspect_ratio` (includes standard and extended options like `1:8`) and `image_size`.
-- Attach an existing Discord image to remix or edit it.
+- **`model`:** Image model slug (default: `OPENROUTER_DEFAULT_IMAGE_MODEL`).
+- **`aspect_ratio` / `image_size`:** Standard and extended ratios such as `1:8`, and an image size hint.
+- **`attachment`:** An image to edit or remix.
 
 ### `/openrouter-media video`
 
-Generate a video from a text prompt, with an optional reference image.
+Generate a video from a prompt, with an optional reference image.
 
-- **Options:** Customizable `aspect_ratio`, `resolution`, `size` (exact dimensions like `1280x720`), `duration`, `generate_audio`, and `seed`.
-- Polled asynchronously server-side until complete, then downloaded and attached to the channel.
-- A video too large to attach is linked instead; anyone who can see the message can download it until the links expire.
+- **`model`:** Video model slug (default: `OPENROUTER_DEFAULT_VIDEO_MODEL`).
+- **`aspect_ratio` / `resolution` / `size` / `duration`:** `size` takes exact dimensions such as `1280x720`.
+- **`generate_audio` / `seed`:** Request audio, and set a seed for repeatable results.
+- **`attachment`:** A reference image.
+- The video is attached when generation finishes. A video too large to attach is linked instead; anyone who can see the message can download it until the link expires.
 
 ### `/openrouter-tools tts`
 
-Convert text into speech audio.
+Convert text to speech (up to 4096 characters).
 
-- **Options:** Customizable `voice`, `instructions`, and `response_format` (`mp3`, `wav`, `flac`, `opus`).
-- Dedicated TTS models (catalog output `speech`, such as the default `google/gemini-3.8-flash-tts`) go through OpenRouter's `/audio/speech` endpoint; the multimodal audio chat models (`audio` output: `openai/gpt-audio`, `openai/gpt-audio-mini`, Google Lyria) go through streamed chat completions.
-- A blank `voice` uses the first voice in the model's catalog list (for Gemini TTS that is `Zephyr`); OpenAI audio chat models list no voices, so they get `alloy`, and other models with no listed voices get the provider default. The reply shows the voice that was used. `/audio/speech` returns only `mp3` or raw PCM: `mp3` is requested when you pick `mp3` and the model supports it, and every other case returns a `.wav` file (the PCM with a WAV header). The reply shows the format you received, and adds `(requested <format>)` when you picked a different one. Gemini TTS returns PCM only, so it always sends `.wav`. If a provider returns another audio type, the file keeps that type (`.ogg`, `.aac`, `.flac`); an unrecognised type is sent as the format the bot asked for.
-- OpenAI audio chat models (`openai/gpt-audio`, `openai/gpt-audio-mini`) stream audio only as 16-bit 24 kHz mono PCM, so they always return a `.wav` file whatever `response_format` you pick. Other audio chat models such as Lyria use the format you pick.
-- OpenAI audio chat models are told to read your text aloud exactly as written, with your `instructions` added as delivery instructions; without that they reply to the text instead of reading it. Lyria generates music, so its request is your text (with `instructions` placed before it) and nothing more.
-- If a `.wav` file is larger than the upload limit Discord reports for the reply (or the server's limit, or 10 MiB when neither is known), it is split into consecutive parts named `speech-part-1-of-N.wav`, one part per message, each a playable WAV file; the details and cost line are on the first message. An `mp3` file over the limit is not split: the bot replies with an error that suggests shorter text or the WAV format.
-- When a provider rejects a request, the error shows the provider's own message after OpenRouter's "Provider returned error".
-- Text input is capped at `4096` characters per request.
+- **`model`:** TTS model slug (default: `OPENROUTER_DEFAULT_TTS_MODEL`). Dedicated TTS models use OpenRouter's `/audio/speech` endpoint; audio chat models (`openai/gpt-audio`, `openai/gpt-audio-mini`, Google Lyria) use chat completions.
+- **`voice`:** Voice name. Blank uses the model's first listed voice (`alloy` on OpenAI audio models).
+- **`instructions`:** Delivery instructions.
+- **`response_format`:** `mp3` (default), `wav`, `flac` or `opus`. Dedicated TTS models return MP3 or WAV and OpenAI audio models always WAV; the reply shows the voice and format you got.
+- A WAV file over the upload limit is split into playable parts; an MP3 file over the limit returns an error.
 
 ### `/openrouter-tools stt`
 
-Generate text from an uploaded audio file.
+Transcribe an audio file (up to 20 MiB; mp3, mp4, m4a, wav, ogg, flac and other common types).
 
-- **Options:** Optional `instructions` to guide the transcription.
-- Supports standard formats like `mp3`, `mp4`, `wav`, `webm`, `flac`, etc. Limit: 20 MiB.
+- **`model`:** STT model slug (default: `OPENROUTER_DEFAULT_STT_MODEL`).
+- **`instructions`:** Transcription instructions (default: an accurate verbatim transcript).
 
-### Utility Commands
+### `/openrouter check_permissions`
 
-- **`/openrouter switch_model`:** Switch the active thread's model, save a per-channel default, or both (`scope=conversation`, `channel`, `both`). For the default `chat` modality it rejects models that don't advertise text output before changing anything, with the same error and command hints as `/openrouter chat`.
-- **`/openrouter models`:** Search the OpenRouter catalog natively with optional `input_modality` (`text`, `image`, `audio`, `video`, `file`) and `output_modality` (`text`, `image`, `audio`, `speech`, `video`, `embeddings`, `transcription`, `rerank`) filters. `audio` also matches the `speech` label OpenRouter gives dedicated TTS models; `speech` narrows to just those.
-- **`/openrouter current_model`:** View the active conversation model, saved channel default, and global fallback.
-- **`/openrouter check_permissions`:** Check if the bot has the necessary permissions in the current channel.
+Check if the bot has the necessary permissions in the current channel.
 
 ## Setup & Installation
 
@@ -93,7 +109,13 @@ Generate text from an uploaded audio file.
 
 ### Installation
 
-1. Clone the repository and navigate to the project directory.
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/jdmsharpe/discord-openrouter.git
+   cd discord-openrouter
+   ```
+
 2. Create and activate a virtual environment:
 
    ```bash
@@ -142,14 +164,14 @@ python -m pip install -e ".[dev]"
 | `LOG_FORMAT` | No | `text` (default) for human-readable logs, or `json` for structured JSON-lines output with per-request IDs |
 | `SAFETY_IDENTIFIER_SECRET` | No | HMAC key for the per-user `user` identifier sent to OpenRouter (Default: a key derived from `BOT_TOKEN`) |
 
-#### User Identifier Sent to OpenRouter
+#### User Identifier
 
-Chat (including follow-up messages and regenerations), image, text-to-speech and speech-to-text requests carry OpenRouter's `user` field, so OpenRouter can isolate abuse to one Discord user instead of the whole account. The value is a 64-character hex HMAC-SHA256 of the Discord user ID; OpenRouter never receives the user ID itself and cannot reverse the value without the key.
+Chat (including follow-ups and regenerations), image, text-to-speech and speech-to-text requests carry a per-user identifier in OpenRouter's `user` field so OpenRouter can attribute a policy violation to one Discord user instead of the whole bot.
 
-- The key is `SAFETY_IDENTIFIER_SECRET` when set, otherwise a key derived from `BOT_TOKEN`. It is never derived from `OPENROUTER_API_KEY`, which OpenRouter holds, and the bot refuses to start when `SAFETY_IDENTIFIER_SECRET` equals `OPENROUTER_API_KEY`. With neither `SAFETY_IDENTIFIER_SECRET` nor `BOT_TOKEN` set, no identifier is sent.
-- discord-openai, discord-grok and discord-claude compute the identifier the same way from the same variables, so a user gets the same value from each bot that shares the secret (or the bot token).
-- The value stays the same for a user while the key stays the same. Rotating `BOT_TOKEN` without setting `SAFETY_IDENTIFIER_SECRET` gives every user a new value; set the secret to any long random string (for example `python -c "import secrets; print(secrets.token_hex(32))"`) to keep values stable across token rotations.
-- `/openrouter-media video` requests carry no `user` field.
+- The identifier is an HMAC-SHA256 of the Discord user ID, keyed with `SAFETY_IDENTIFIER_SECRET` or, when that is unset, a key derived from `BOT_TOKEN`. OpenRouter never receives the user ID or the key, and the bot refuses to start when `SAFETY_IDENTIFIER_SECRET` equals `OPENROUTER_API_KEY`.
+- Changing the key (or the bot token, when no secret is set) gives every user a new identifier. To keep identifiers stable across token changes, set the secret to a long random string, for example `python -c "import secrets; print(secrets.token_hex(32))"`.
+- discord-claude, discord-grok, discord-openai and discord-openrouter compute it the same way, so a user gets the same identifier from each bot that shares the key.
+- Video requests carry none.
 
 ### Running the Bot
 
@@ -189,9 +211,15 @@ bot.add_cog(OpenRouterCog(bot=bot))
 
 ## Usage
 
-### Prompt Examples
+1. Run `/openrouter chat` to start a conversation.
+2. Send messages in the same channel to continue it.
+3. Use the controls under each reply:
+   - 🔄 Regenerate the last response
+   - ⏯️ Pause or resume the conversation
+   - ⏹️ End the conversation
+   - **Tools** menu: turn tools on or off mid-conversation
 
-Try these multimodal and tool-assisted commands:
+### Prompt Examples
 
 - **Web Search:** `/openrouter chat web_search:true prompt:What changed in OpenRouter this week?`
 - **PDF Analysis:** `/openrouter chat prompt:Summarize this contract attachment:<pdf> pdf_engine:mistral-ocr`
@@ -200,18 +228,18 @@ Try these multimodal and tool-assisted commands:
 - **Video Generation:** `/openrouter-media video prompt:A neon train racing through a rainy cyberpunk city at night`
 - **Video from Image:** `/openrouter-media video prompt:Animate this character walking forward attachment:<image>`
 
-### Troubleshooting & Notes
+### Troubleshooting
 
-- **Attachment Limits:** The bot currently rejects Discord attachments larger than `20 MiB`.
-- **Modality Support:** Although the bot handles normalized payloads, your selected model must actually support the requested input/output types. Use `/openrouter models` to check. Every command validates the resolved model against the catalog up front: `/openrouter chat` requires text output, `/openrouter-media image` image output, `/openrouter-media video` video output, `/openrouter-tools tts` `audio` or `speech` output, and `/openrouter-tools stt` audio input plus text output (dedicated `transcription` models are rejected, since STT runs through chat completions).
-- **Costs & Usage:** Each response ends with one line such as `$0.0031 · 2.3k in (512 cached) / 441 out (66 thinking) · 1 search · $0.09 today`. The request cost is OpenRouter's `usage.cost`, shown to four decimals; the daily total is shown in whole cents. For BYOK requests (`usage.is_byok`), `usage.cost` is only OpenRouter's fee, so the bot adds `usage.cost_details.upstream_inference_cost` (the amount your provider key is billed) to both the request cost and the daily total. If `usage.cost` is missing, the bot estimates the cost from the catalog pricing and prefixes it with `est.`. `in` counts every input token including cache reads (`cached`), and `out` counts every output token including reasoning (`thinking`). Web search turns show how many searches OpenRouter ran (`usage.server_tool_use_details.web_search_requests`). Image, video, and speech commands describe the item instead of token counts, for example `$0.0400 · 1 image · 16:9 · $0.12 today`. `/audio/speech` replies carry no cost, so for `speech` models the bot looks the request up in OpenRouter's `/generation` endpoint for about 4 seconds. That record usually appears 38 to 125 seconds after the request, so the line usually reads `cost unavailable · 57 chars · Zephyr`, and the request is then not added to the daily total.
-- **PDF History:** Assistant annotations are preserved in conversation history, meaning you can ask follow-up questions about the same PDF across multiple turns without re-uploading the document.
+- **Attachment limit:** Discord attachments over 20 MiB are rejected.
+- **Model support:** Each command checks the model against the catalog before the request: `/openrouter chat` needs text output, `/openrouter-media image` image output, `/openrouter-media video` video output, `/openrouter-tools tts` audio or speech output, and `/openrouter-tools stt` audio input and text output. Use `/openrouter models` to find a matching model.
+- **PDF follow-ups:** Conversation history keeps PDF annotations, so you can ask follow-up questions about a PDF without uploading it again.
+- **Speech costs:** OpenRouter usually publishes a speech request's cost about a minute after the reply, so the cost line often reads `cost unavailable` and the request is not added to the daily total.
 
 ## Development
 
 ### Testing
 
-Tests use `pytest`. The current suite is mocked and covers config parsing, model lookup, state cleanup, and view callbacks.
+Tests use `pytest` with `pytest-asyncio` (`asyncio_mode = "auto"`). All tests are mocked (no real API calls).
 
 ```bash
 # Install developer tooling if you have not already
@@ -221,11 +249,11 @@ python -m pip install -e ".[dev]"
 python -m pytest -q
 
 # Run tests in Docker
-docker build --build-arg PYTHON_VERSION=3.13 -f Dockerfile.test -t discord-openrouter-test .
-docker run --rm discord-openrouter-test python -m pytest -q
+docker build --build-arg PYTHON_VERSION=3.11 -f Dockerfile.test -t discord-openrouter-test:3.11 .
+docker run --rm discord-openrouter-test:3.11 python -m pytest -q
 
 # Run linting and type checks in Docker
-docker run --rm discord-openrouter-test sh -lc 'ruff check src tests && ruff format --check src tests && pyright'
+docker run --rm discord-openrouter-test:3.11 sh -lc 'ruff check src tests && ruff format --check src tests && pyright'
 ```
 
 ### Linting & Type Checking
