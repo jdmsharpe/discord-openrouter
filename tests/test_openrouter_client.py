@@ -700,6 +700,311 @@ def test_request_with_retries_raises_after_max_attempts(monkeypatch):
     assert f"{MAX_API_ATTEMPTS} attempts" in str(exc_info.value)
 
 
+_IN_FLIGHT_BUDGET_402 = {
+    "error": {
+        "code": 402,
+        "message": "This request would exceed your available credits given your current in-flight requests.",
+        "metadata": {
+            "reason": "in_flight_budget_exhausted",
+            "limit_source": "openrouter_in_flight_budget",
+            "remedy_hint": "Retry after your in-flight requests settle.",
+        },
+    }
+}
+_OUT_OF_CREDITS_402 = {
+    "error": {
+        "code": 402,
+        "message": "Insufficient credits. Add more using https://openrouter.ai/settings/credits",
+    }
+}
+
+
+def _install_mock_transport(monkeypatch, responses):
+    """Serve `responses` in order through a real httpx MockTransport and record the sleeps.
+
+    Each item is an `httpx.Response`; once the list is used up the last one repeats.
+    Returns (request log, sleep mock).
+    """
+    real_async_client = client_module.httpx.AsyncClient
+    requests: list = []
+
+    def handler(request):
+        requests.append(request)
+        return responses[min(len(requests), len(responses)) - 1]
+
+    def async_client(**kwargs):
+        return real_async_client(transport=client_module.httpx.MockTransport(handler), **kwargs)
+
+    sleep = AsyncMock()
+    monkeypatch.setattr(client_module.httpx, "AsyncClient", async_client)
+    monkeypatch.setattr(client_module.asyncio, "sleep", sleep)
+    return requests, sleep
+
+
+def _ok_response():
+    return client_module.httpx.Response(200, json={"ok": True})
+
+
+@pytest.mark.parametrize("status_code", [429, 503])
+def test_request_with_retries_honours_retry_after_on_429_and_503(monkeypatch, status_code):
+    requests, sleep = _install_mock_transport(
+        monkeypatch,
+        [
+            client_module.httpx.Response(
+                status_code, headers={"Retry-After": "7"}, json={"error": {"message": "busy"}}
+            ),
+            _ok_response(),
+        ],
+    )
+
+    response = asyncio.run(
+        client_module._request_with_retries("GET", "https://example.com/x", timeout=5.0)
+    )
+
+    assert response.status_code == 200
+    assert len(requests) == 2
+    assert [call.args[0] for call in sleep.await_args_list] == [7.0]
+
+
+def test_request_with_retries_retries_in_flight_budget_402_after_retry_after(monkeypatch):
+    requests, sleep = _install_mock_transport(
+        monkeypatch,
+        [
+            client_module.httpx.Response(
+                402, headers={"Retry-After": "3"}, json=_IN_FLIGHT_BUDGET_402
+            ),
+            _ok_response(),
+        ],
+    )
+
+    response = asyncio.run(
+        client_module._request_with_retries("POST", "https://example.com/x", timeout=5.0)
+    )
+
+    assert response.status_code == 200
+    assert len(requests) == 2
+    assert [call.args[0] for call in sleep.await_args_list] == [3.0]
+
+
+def test_request_with_retries_does_not_retry_in_flight_budget_402_without_retry_after(
+    monkeypatch,
+):
+    requests, sleep = _install_mock_transport(
+        monkeypatch,
+        [client_module.httpx.Response(402, json=_IN_FLIGHT_BUDGET_402), _ok_response()],
+    )
+
+    response = asyncio.run(
+        client_module._request_with_retries("POST", "https://example.com/x", timeout=5.0)
+    )
+
+    assert response.status_code == 402
+    assert len(requests) == 1
+    sleep.assert_not_awaited()
+
+
+def test_request_with_retries_backs_off_when_in_flight_budget_402_retry_after_is_unparseable(
+    monkeypatch,
+):
+    requests, sleep = _install_mock_transport(
+        monkeypatch,
+        [
+            client_module.httpx.Response(
+                402, headers={"Retry-After": "soon"}, json=_IN_FLIGHT_BUDGET_402
+            ),
+            _ok_response(),
+        ],
+    )
+
+    response = asyncio.run(
+        client_module._request_with_retries("POST", "https://example.com/x", timeout=5.0)
+    )
+
+    assert response.status_code == 200
+    assert len(requests) == 2
+    (delay,) = [call.args[0] for call in sleep.await_args_list]
+    first_backoff = client_module.INITIAL_RETRY_DELAY_SECONDS
+    assert first_backoff <= delay <= first_backoff * (1 + client_module.RETRY_JITTER_RATIO)
+
+
+def _assert_normal_backoff(delay, attempt=1):
+    base_delay = client_module.INITIAL_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+    assert base_delay <= delay <= base_delay * (1 + client_module.RETRY_JITTER_RATIO)
+
+
+@pytest.mark.parametrize(("header", "expected"), [("7", 7.0), ("0", 0.0), ("60", 60.0)])
+def test_compute_retry_delay_waits_the_retry_after_seconds(header, expected):
+    assert client_module.compute_retry_delay(1, retry_after=header) == expected
+
+
+@pytest.mark.parametrize("header", ["61", "600", "86400", "1e9"])
+def test_compute_retry_delay_caps_a_long_retry_after(header):
+    assert client_module.compute_retry_delay(1, retry_after=header) == (
+        client_module.RETRY_AFTER_MAX_SECONDS
+    )
+    assert client_module.RETRY_AFTER_MAX_SECONDS == 60.0
+
+
+@pytest.mark.parametrize("header", ["inf", "-inf", "Infinity", "1e999", "nan", "-5", "soon", ""])
+def test_compute_retry_delay_ignores_a_non_finite_or_negative_retry_after(header):
+    _assert_normal_backoff(client_module.compute_retry_delay(1, retry_after=header))
+    _assert_normal_backoff(client_module.compute_retry_delay(3, retry_after=header), attempt=3)
+
+
+def test_compute_retry_delay_caps_a_far_future_retry_after_date():
+    assert client_module.compute_retry_delay(1, retry_after="Fri, 31 Dec 2100 23:59:59 GMT") == (
+        client_module.RETRY_AFTER_MAX_SECONDS
+    )
+
+
+def test_compute_retry_delay_ignores_a_retry_after_date_in_the_past():
+    _assert_normal_backoff(
+        client_module.compute_retry_delay(1, retry_after="Mon, 01 Jan 2001 00:00:00 GMT")
+    )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        client_module.httpx.Response(
+            429, headers={"Retry-After": "600"}, json={"error": {"message": "slow down"}}
+        ),
+        client_module.httpx.Response(
+            503, headers={"Retry-After": "600"}, json={"error": {"message": "busy"}}
+        ),
+        client_module.httpx.Response(
+            402, headers={"Retry-After": "600"}, json=_IN_FLIGHT_BUDGET_402
+        ),
+    ],
+    ids=["429", "503", "in-flight-402"],
+)
+def test_request_with_retries_waits_at_most_the_retry_after_cap(monkeypatch, response):
+    requests, sleep = _install_mock_transport(monkeypatch, [response, _ok_response()])
+
+    result = asyncio.run(
+        client_module._request_with_retries("POST", "https://example.com/x", timeout=5.0)
+    )
+
+    assert result.status_code == 200
+    assert len(requests) == 2
+    assert [call.args[0] for call in sleep.await_args_list] == [60.0]
+
+
+@pytest.mark.parametrize("header", ["inf", "nan", "-5"])
+def test_request_with_retries_uses_the_backoff_for_a_non_finite_or_negative_retry_after(
+    monkeypatch, header
+):
+    requests, sleep = _install_mock_transport(
+        monkeypatch,
+        [
+            client_module.httpx.Response(
+                503, headers={"Retry-After": header}, json={"error": {"message": "busy"}}
+            ),
+            _ok_response(),
+        ],
+    )
+
+    result = asyncio.run(
+        client_module._request_with_retries("GET", "https://example.com/x", timeout=5.0)
+    )
+
+    assert result.status_code == 200
+    assert len(requests) == 2
+    (delay,) = [call.args[0] for call in sleep.await_args_list]
+    _assert_normal_backoff(delay)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        client_module.httpx.Response(402, json=_OUT_OF_CREDITS_402),
+        client_module.httpx.Response(
+            402,
+            headers={"Retry-After": "3"},
+            json={"error": {"code": 402, "metadata": {"limit_source": "openrouter_key_limit"}}},
+        ),
+        client_module.httpx.Response(
+            402, json={"error": {"code": 402, "metadata": {"limit_source": "openrouter_credits"}}}
+        ),
+        client_module.httpx.Response(402, headers={"Retry-After": "3"}, content=b"not json"),
+        client_module.httpx.Response(402, json=["unexpected", "body"]),
+    ],
+    ids=["no-metadata", "key-limit", "credits", "non-json-body", "non-object-body"],
+)
+def test_request_with_retries_does_not_retry_other_402_responses(monkeypatch, response):
+    requests, sleep = _install_mock_transport(monkeypatch, [response, _ok_response()])
+
+    result = asyncio.run(
+        client_module._request_with_retries("POST", "https://example.com/x", timeout=5.0)
+    )
+
+    assert result.status_code == 402
+    assert len(requests) == 1
+    sleep.assert_not_awaited()
+
+
+def test_create_chat_completion_shows_the_out_of_credits_message_without_retrying(monkeypatch):
+    requests, sleep = _install_mock_transport(
+        monkeypatch, [client_module.httpx.Response(402, json=_OUT_OF_CREDITS_402)]
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    with pytest.raises(OpenRouterApiError, match="Insufficient credits"):
+        asyncio.run(
+            client.create_chat_completion(
+                model="deepseek/deepseek-v4-flash",
+                messages=[{"role": "user", "content": "hello"}],
+            )
+        )
+
+    assert len(requests) == 1
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        client_module.httpx.Response(402, headers={"Retry-After": "1"}, json=_IN_FLIGHT_BUDGET_402),
+        client_module.httpx.Response(
+            503, headers={"Retry-After": "1"}, json={"error": {"message": "overloaded"}}
+        ),
+    ],
+    ids=["in-flight-402", "503"],
+)
+def test_request_with_retries_stops_at_the_attempt_cap_with_retry_after(monkeypatch, response):
+    requests, sleep = _install_mock_transport(monkeypatch, [response])
+
+    result = asyncio.run(
+        client_module._request_with_retries("POST", "https://example.com/x", timeout=5.0)
+    )
+
+    assert result.status_code == response.status_code
+    assert len(requests) == client_module.MAX_API_ATTEMPTS
+    assert sleep.await_count == client_module.MAX_API_ATTEMPTS - 1
+
+
+def test_create_chat_completion_raises_the_api_message_when_in_flight_402_persists(monkeypatch):
+    requests, _sleep = _install_mock_transport(
+        monkeypatch,
+        [
+            client_module.httpx.Response(
+                402, headers={"Retry-After": "1"}, json=_IN_FLIGHT_BUDGET_402
+            )
+        ],
+    )
+    client = OpenRouterClient(api_key="test-key")
+
+    with pytest.raises(OpenRouterApiError, match="in-flight requests"):
+        asyncio.run(
+            client.create_chat_completion(
+                model="deepseek/deepseek-v4-flash",
+                messages=[{"role": "user", "content": "hello"}],
+            )
+        )
+
+    assert len(requests) == client_module.MAX_API_ATTEMPTS
+
+
 def test_create_video_generation_uses_videos_endpoint(monkeypatch):
     class _FakeHttpResponse:
         def __init__(self, status_code, payload):

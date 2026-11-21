@@ -7,11 +7,9 @@ from discord_openrouter.util import (
     ModelInfo,
     ModelPricing,
     build_context_compression_plugins,
-    build_datetime_tools,
     build_pdf_plugins,
     build_prompt_cache_control,
     build_web_plugin_override,
-    build_web_search_tools,
     calculate_cost,
     calculate_cost_breakdown,
     describe_chat_settings,
@@ -88,6 +86,71 @@ def test_extract_url_citations_deduplicates_urls_and_keeps_titles():
             "title": "https://github.com/openrouter",
             "content": "",
         },
+    ]
+
+
+def _url_citation(url, *, title="Page", **flags):
+    return {"type": "url_citation", "url_citation": {"url": url, "title": title, **flags}}
+
+
+def test_extract_url_citations_keeps_cited_and_explicitly_not_uncited_urls():
+    citations = extract_url_citations(
+        {
+            "annotations": [
+                _url_citation("https://example.com/absent-flag", title="Absent"),
+                _url_citation("https://example.com/false-flag", title="False", uncited=False),
+            ]
+        }
+    )
+
+    assert [citation["url"] for citation in citations] == [
+        "https://example.com/absent-flag",
+        "https://example.com/false-flag",
+    ]
+
+
+def test_extract_url_citations_leaves_out_uncited_urls():
+    citations = extract_url_citations(
+        {
+            "annotations": [
+                _url_citation("https://example.com/quoted", title="Quoted"),
+                _url_citation("https://example.com/consulted", title="Consulted", uncited=True),
+            ]
+        }
+    )
+
+    assert [citation["url"] for citation in citations] == ["https://example.com/quoted"]
+
+
+def test_extract_url_citations_returns_nothing_when_every_url_is_uncited():
+    assert (
+        extract_url_citations(
+            {"annotations": [_url_citation("https://example.com/consulted", uncited=True)]}
+        )
+        == []
+    )
+
+
+def test_extract_url_citations_leaves_out_uncited_flag_on_the_annotation_itself():
+    # The Responses API schema puts `uncited` on the annotation, not inside `url_citation`.
+    annotation = _url_citation("https://example.com/consulted")
+    annotation["uncited"] = True
+
+    assert extract_url_citations({"annotations": [annotation]}) == []
+
+
+def test_extract_url_citations_lists_a_url_cited_after_an_uncited_duplicate():
+    citations = extract_url_citations(
+        {
+            "annotations": [
+                _url_citation("https://example.com/page", title="Consulted", uncited=True),
+                _url_citation("https://example.com/page", title="Quoted"),
+            ]
+        }
+    )
+
+    assert [(citation["url"], citation["title"]) for citation in citations] == [
+        ("https://example.com/page", "Quoted")
     ]
 
 
@@ -380,14 +443,6 @@ def test_build_pdf_plugins_returns_expected_payload():
 
 def test_build_web_plugin_override_returns_expected_payload():
     assert build_web_plugin_override(enabled=False) == [{"id": "web", "enabled": False}]
-
-
-def test_build_web_search_tools_returns_expected_payload():
-    assert build_web_search_tools() == [{"type": "openrouter:web_search"}]
-
-
-def test_build_datetime_tools_returns_expected_payload():
-    assert build_datetime_tools() == [{"type": "openrouter:datetime"}]
 
 
 def test_build_context_compression_plugins_returns_expected_payload():

@@ -5,6 +5,7 @@ import base64
 import contextlib
 import json
 import logging
+import math
 import random
 import time
 from datetime import UTC, datetime
@@ -27,9 +28,17 @@ from ...util import ModelInfo, parse_model_info
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+# OpenRouter may send `Retry-After` on these statuses, and on a 402 whose
+# `error.metadata.limit_source` is the in-flight budget (errors-and-debugging, limits docs).
+RETRY_AFTER_STATUS_CODES = {429, 503}
+PAYMENT_REQUIRED_STATUS_CODE = 402
+IN_FLIGHT_BUDGET_LIMIT_SOURCE = "openrouter_in_flight_budget"
 MAX_API_ATTEMPTS = 5
 INITIAL_RETRY_DELAY_SECONDS = 0.5
 RETRY_JITTER_RATIO = 0.25
+# Longest wait taken from a `Retry-After` header. Commands defer the interaction and then await
+# the retry loop, and a Discord interaction token lasts 15 minutes.
+RETRY_AFTER_MAX_SECONDS = 60.0
 # Both listing endpoints return text-output models only unless asked otherwise
 # (openapi.json: "Returns text-output models by default"), so every catalog fetch
 # passes this or image/video/TTS models never reach `get_model` and the `/models` search.
@@ -61,22 +70,54 @@ def parse_retry_after(retry_after: str | None) -> float | None:
     if not retry_after:
         return None
     retry_after = retry_after.strip()
+    seconds: float | None = None
     with contextlib.suppress(ValueError):
-        return max(0.0, float(retry_after))
-    with contextlib.suppress(TypeError, ValueError, OverflowError):
-        retry_at = parsedate_to_datetime(retry_after)
-        if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=UTC)
-        return max(0.0, (retry_at - datetime.now(UTC)).total_seconds())
-    return None
+        seconds = float(retry_after)
+    if seconds is None:
+        with contextlib.suppress(TypeError, ValueError, OverflowError):
+            retry_at = parsedate_to_datetime(retry_after)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=UTC)
+            seconds = (retry_at - datetime.now(UTC)).total_seconds()
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
+        return None
+    return seconds
 
 
 def compute_retry_delay(attempt: int, *, retry_after: str | None = None) -> float:
     parsed_retry_after = parse_retry_after(retry_after)
     if parsed_retry_after is not None:
-        return parsed_retry_after
+        return min(parsed_retry_after, RETRY_AFTER_MAX_SECONDS)
     base_delay = INITIAL_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
     return base_delay + random.uniform(0.0, base_delay * RETRY_JITTER_RATIO)
+
+
+def _is_in_flight_budget_error(response: httpx.Response) -> bool:
+    """True for a 402 that the docs call transient: a full in-flight spending budget."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    error = payload.get("error") if isinstance(payload, dict) else None
+    metadata = error.get("metadata") if isinstance(error, dict) else None
+    return isinstance(metadata, dict) and metadata.get("limit_source") == (
+        IN_FLIGHT_BUDGET_LIMIT_SOURCE
+    )
+
+
+def _retry_decision(response: httpx.Response) -> tuple[bool, str | None]:
+    """Return whether to retry the response and the `Retry-After` value to honour."""
+    status_code = response.status_code
+    if status_code in RETRY_AFTER_STATUS_CODES:
+        return True, response.headers.get("Retry-After")
+    if status_code in RETRYABLE_STATUS_CODES:
+        return True, None
+    if status_code == PAYMENT_REQUIRED_STATUS_CODE:
+        retry_after = response.headers.get("Retry-After")
+        # A 402 without the header is not a wait-and-retry case (errors-and-debugging docs).
+        if retry_after and _is_in_flight_budget_error(response):
+            return True, retry_after
+    return False, None
 
 
 async def _request_with_retries(
@@ -89,7 +130,7 @@ async def _request_with_retries(
     json_payload: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
 ) -> httpx.Response:
-    """Perform an httpx request with exponential backoff on 429/5xx and transport errors."""
+    """Perform an httpx request, retrying 429/5xx, the in-flight-budget 402 and transport errors."""
     request_kwargs: dict[str, Any] = {}
     if headers is not None:
         request_kwargs["headers"] = headers
@@ -122,13 +163,11 @@ async def _request_with_retries(
             await asyncio.sleep(delay)
             continue
 
-        if response.status_code in RETRYABLE_STATUS_CODES and attempt < MAX_API_ATTEMPTS:
-            delay = compute_retry_delay(
-                attempt,
-                retry_after=(
-                    response.headers.get("Retry-After") if response.status_code == 429 else None
-                ),
-            )
+        should_retry, retry_after = (
+            _retry_decision(response) if attempt < MAX_API_ATTEMPTS else (False, None)
+        )
+        if should_retry:
+            delay = compute_retry_delay(attempt, retry_after=retry_after)
             logger.warning(
                 "OpenRouter %s %s returned HTTP %s on attempt %d/%d; retrying in %.2fs",
                 method,

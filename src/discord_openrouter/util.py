@@ -358,6 +358,10 @@ def extract_url_citations(message: dict[str, Any]) -> list[dict[str, str]]:
         citation_payload = annotation.get("url_citation") or {}
         if not isinstance(citation_payload, dict):
             continue
+        # `uncited: true` marks a page that was consulted but not quoted. Chat completions
+        # nest the flag in `url_citation`; the Responses API puts it on the annotation itself.
+        if citation_payload.get("uncited") is True or annotation.get("uncited") is True:
+            continue
 
         url = citation_payload.get("url")
         if not isinstance(url, str):
@@ -422,14 +426,6 @@ def build_pdf_plugins(pdf_engine: str | None) -> list[dict[str, Any]] | None:
 
 def build_web_plugin_override(*, enabled: bool) -> list[dict[str, Any]]:
     return [{"id": "web", "enabled": enabled}]
-
-
-def build_web_search_tools() -> list[dict[str, Any]]:
-    return [{"type": "openrouter:web_search"}]
-
-
-def build_datetime_tools() -> list[dict[str, Any]]:
-    return [{"type": "openrouter:datetime"}]
 
 
 def build_context_compression_plugins(enabled: bool | None) -> list[dict[str, Any]] | None:
