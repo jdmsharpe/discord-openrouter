@@ -23,7 +23,7 @@ A Discord bot for the OpenRouter API, built on Pycord 2.0. It provides chat with
 - **Attachments:** Text, images, PDFs, audio, video and other files. PDFs can use the `cloudflare-ai`, `mistral-ocr` or `native` parser.
 - **Reasoning:** Reasoning effort from `none` to `max` on models that support it. Reasoning details are kept across turns.
 - **Built-in tools:** OpenRouter's `web_search` and `datetime` server tools.
-- **Citations:** Web search citations appear in a Sources embed.
+- **Citations:** Web search citations appear in a Sources embed; pages the model only consulted are left out.
 - **Media generation:**
   - **Images:** Generation and editing with any model that outputs images.
   - **Video:** Text-to-video and image-to-video through OpenRouter's `/videos` API.
@@ -158,7 +158,7 @@ python -m pip install -e ".[dev]"
 | `OPENROUTER_DEFAULT_PDF_ENGINE` | No | Default engine for PDF attachments: `cloudflare-ai`, `mistral-ocr`, `native` |
 | `OPENROUTER_SITE_URL` | No | Optional `HTTP-Referer` sent to OpenRouter |
 | `OPENROUTER_APP_NAME` | No | Optional app name sent as `X-OpenRouter-Title` header |
-| `OPENROUTER_APP_CATEGORIES` | No | Optional categories sent as `X-OpenRouter-Categories` |
+| `OPENROUTER_APP_CATEGORIES` | No | Up to 2 recognized categories (for example `general-chat,image-gen`) sent as `X-OpenRouter-Categories`; others are dropped |
 | `OPENROUTER_MODEL_CACHE_TTL_SECONDS` | No | Seconds to cache the model catalog fetched from `/models/user?output_modalities=all` (Default: `300`) |
 | `SHOW_COST_EMBEDS` | No | Show usage/cost embeds (Default: `true`) |
 | `LOG_FORMAT` | No | `text` (default) for human-readable logs, or `json` for structured JSON-lines output with per-request IDs |
